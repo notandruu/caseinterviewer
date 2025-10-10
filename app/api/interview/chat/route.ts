@@ -42,6 +42,8 @@ Case Context:
 - Interrupt briefly when logic drifts, but stay supportive
 - After candidate answers: immediately give next challenge/question
 - Maintain BRISK pace - simulate high-pressure environment
+- CRITICAL: Output PLAIN TEXT ONLY - NO markdown formatting, NO asterisks, NO special characters
+- Never use **bold**, *italics*, or any markdown - this is being read aloud by text-to-speech
 
 🛠️ Data & Guidance:
 - Provide realistic numbers when asked (make them up, keep consistent)
@@ -72,7 +74,15 @@ Remember: Real MBB interviews are FAST. Test their ability to think on their fee
       maxTokens: 200,
     })
 
-    return Response.json({ message: text })
+    // Strip markdown formatting to prevent TTS from reading asterisks
+    const cleanText = text
+      .replace(/\*\*(.+?)\*\*/g, '$1')  // Remove bold **text**
+      .replace(/\*(.+?)\*/g, '$1')      // Remove italic *text*
+      .replace(/_(.+?)_/g, '$1')        // Remove italic _text_
+      .replace(/~~(.+?)~~/g, '$1')      // Remove strikethrough ~~text~~
+      .replace(/`(.+?)`/g, '$1')        // Remove code `text`
+
+    return Response.json({ message: cleanText })
   } catch (error) {
     console.error("[v0] Error in chat route:", error)
     return Response.json({ error: "Internal server error" }, { status: 500 })
