@@ -38,6 +38,9 @@ export function VoiceSessionV2({ caseData, interviewId, userId }: VoiceSessionPr
   const [caseStage, setCaseStage] = useState<CaseStage>('intro')
   const [showExhibits, setShowExhibits] = useState(false)
   const [textModeEnabled, setTextModeEnabled] = useState(true) // Toggle for text display
+  const [timerSeconds, setTimerSeconds] = useState(120) // 2 minutes for structuring
+  const [timerActive, setTimerActive] = useState(false)
+  const [showTimer, setShowTimer] = useState(true) // Toggle for timer visibility
 
   const router = useRouter()
   const supabase = createClient()
@@ -173,6 +176,37 @@ export function VoiceSessionV2({ caseData, interviewId, userId }: VoiceSessionPr
   useEffect(() => {
     logEvent('state_change', { new_state: sessionState })
   }, [sessionState])
+
+  // Timer countdown effect
+  useEffect(() => {
+    if (!timerActive) return
+
+    const interval = setInterval(() => {
+      setTimerSeconds((prev) => {
+        if (prev <= 1) {
+          setTimerActive(false)
+          logEvent('timer_expired', { stage: caseStage })
+          return 0
+        }
+        return prev - 1
+      })
+    }, 1000)
+
+    return () => clearInterval(interval)
+  }, [timerActive, caseStage])
+
+  // Auto-start timer when entering structuring stage
+  useEffect(() => {
+    if (caseStage === 'structuring' && !timerActive && timerSeconds === 120) {
+      setTimerActive(true)
+      logEvent('timer_started', { stage: caseStage, duration: 120 })
+    }
+    // Reset timer when leaving structuring stage
+    if (caseStage !== 'structuring' && timerActive) {
+      setTimerActive(false)
+      setTimerSeconds(120)
+    }
+  }, [caseStage])
 
   // Auto-start/stop recording based on state
   useEffect(() => {
@@ -543,6 +577,25 @@ export function VoiceSessionV2({ caseData, interviewId, userId }: VoiceSessionPr
 
       {/* Settings and End Interview */}
       <div style={{ position: 'absolute', top: '2rem', right: '2rem', display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+        {/* Timer Toggle */}
+        <button
+          onClick={() => setShowTimer(!showTimer)}
+          style={{
+            padding: '0.5rem 1rem',
+            backgroundColor: showTimer ? '#F6C342' : 'transparent',
+            border: `1px solid ${showTimer ? '#F6C342' : '#555'}`,
+            borderRadius: '0.5rem',
+            color: showTimer ? '#3A3A3A' : '#555',
+            cursor: 'pointer',
+            fontSize: '0.75rem',
+            fontWeight: 500,
+            transition: 'all 200ms ease',
+          }}
+          title={showTimer ? 'Timer: ON' : 'Timer: OFF (hidden)'}
+        >
+          {showTimer ? '⏱️ Timer' : '⏱️ Hidden'}
+        </button>
+
         {/* Text Mode Toggle */}
         <button
           onClick={() => setTextModeEnabled(!textModeEnabled)}
@@ -559,7 +612,7 @@ export function VoiceSessionV2({ caseData, interviewId, userId }: VoiceSessionPr
           }}
           title={textModeEnabled ? 'Text mode: ON (easier)' : 'Text mode: OFF (high stakes)'}
         >
-          {textModeEnabled ? '📝 Text On' : '🎯 Text Off'}
+          {textModeEnabled ? '📝 Text' : '🎯 No Text'}
         </button>
 
         {/* End Interview Button */}
@@ -578,6 +631,27 @@ export function VoiceSessionV2({ caseData, interviewId, userId }: VoiceSessionPr
           End Interview
         </button>
       </div>
+
+      {/* Structuring Timer */}
+      {caseStage === 'structuring' && showTimer && (
+        <div style={{
+          position: 'absolute',
+          top: '7rem',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          padding: '1rem 2rem',
+          backgroundColor: timerSeconds <= 30 ? '#ff6b6b' : '#F6C342',
+          borderRadius: '2rem',
+          fontSize: '2rem',
+          fontWeight: 700,
+          color: timerSeconds <= 30 ? '#fff' : '#3A3A3A',
+          boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+          transition: 'all 300ms ease',
+          animation: timerSeconds <= 10 ? 'vs-timer-pulse 1s infinite' : 'none',
+        }}>
+          {Math.floor(timerSeconds / 60)}:{(timerSeconds % 60).toString().padStart(2, '0')}
+        </div>
+      )}
 
       {/* Main content */}
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3rem' }}>
