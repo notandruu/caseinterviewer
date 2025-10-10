@@ -5,15 +5,26 @@ import { useRouter } from 'next/navigation'
 import { Mic } from 'lucide-react'
 import { AgentOrb } from './AgentOrb'
 import { MicVisualizer } from './MicVisualizer'
-import { VoiceSessionProps, TranscriptMessage } from './types'
+import { VoiceSessionProps, TranscriptMessage, CaseStage } from './types'
 import { reducer, INITIAL_STATE, getProcessingCaption, getStateCaption } from './state'
 import { getMicStream, createAudioAnalyzer, createRMSMeter, createSilenceDetector } from '@/lib/audio/analyzer'
 import { createClient } from '@/lib/supabase/client'
+import { DataExhibitSlideover } from '@/components/data-exhibit-slideover'
 import '../../styles/voice-session.css'
 
 // Telemetry logger
 function logEvent(event: string, data?: Record<string, any>) {
   console.log(`[VoiceSession] ${event}`, data || '')
+}
+
+// Stage detection keywords
+const STAGE_KEYWORDS: Record<CaseStage, string[]> = {
+  intro: ['introduce', 'case', 'client', 'situation', 'problem'],
+  clarifying: ['clarify', 'question', 'understand', 'confirm', 'ask'],
+  structuring: ['structure', 'framework', 'approach', 'organize', 'buckets'],
+  analysis: ['analyze', 'data', 'exhibit', 'chart', 'graph', 'number', 'calculation'],
+  brainstorming: ['ideas', 'brainstorm', 'options', 'alternatives', 'solutions'],
+  synthesis: ['recommend', 'conclusion', 'summary', 'synthesize', 'final']
 }
 
 export function VoiceSessionV2({ caseData, interviewId, userId }: VoiceSessionProps) {
@@ -24,6 +35,8 @@ export function VoiceSessionV2({ caseData, interviewId, userId }: VoiceSessionPr
   const [isRecording, setIsRecording] = useState(false)
   const [ttsEnergy, setTtsEnergy] = useState(0.5) // For orb pulse during TTS
   const [displayedText, setDisplayedText] = useState('') // For synchronized text animation
+  const [caseStage, setCaseStage] = useState<CaseStage>('intro')
+  const [showExhibits, setShowExhibits] = useState(false)
 
   const router = useRouter()
   const supabase = createClient()
@@ -337,6 +350,19 @@ export function VoiceSessionV2({ caseData, interviewId, userId }: VoiceSessionPr
     }
   }
 
+  const detectStage = (text: string): CaseStage | null => {
+    const lowerText = text.toLowerCase()
+
+    // Check each stage's keywords
+    for (const [stage, keywords] of Object.entries(STAGE_KEYWORDS)) {
+      const matchCount = keywords.filter(keyword => lowerText.includes(keyword)).length
+      if (matchCount >= 2) { // Need at least 2 keyword matches
+        return stage as CaseStage
+      }
+    }
+    return null
+  }
+
   const handleUserSpeech = (transcript: string) => {
     const userMessage: TranscriptMessage = {
       role: 'user',
@@ -378,6 +404,20 @@ export function VoiceSessionV2({ caseData, interviewId, userId }: VoiceSessionPr
       }
 
       setMessages((prev) => [...prev, aiMessage])
+
+      // Detect stage from AI response
+      const detectedStage = detectStage(data.message)
+      if (detectedStage && detectedStage !== caseStage) {
+        setCaseStage(detectedStage)
+        logEvent('stage_change', { from: caseStage, to: detectedStage })
+
+        // Auto-open exhibits when entering analysis stage
+        if (detectedStage === 'analysis') {
+          setShowExhibits(true)
+          logEvent('exhibits_auto_open', { stage: detectedStage })
+        }
+      }
+
       dispatch({ type: 'LLM_RESPONSE_READY', payload: data.message })
       speakText(data.message)
     } catch (error) {
@@ -445,6 +485,34 @@ export function VoiceSessionV2({ caseData, interviewId, userId }: VoiceSessionPr
     ? displayedText
     : currentTranscript || latestMessage?.content || ''
 
+  const getStageLabel = (): string => {
+    switch (caseStage) {
+      case 'intro': return 'Introduction'
+      case 'clarifying': return 'Clarifying Questions'
+      case 'structuring': return 'Structuring'
+      case 'analysis': return 'Analysis & Data'
+      case 'brainstorming': return 'Brainstorming'
+      case 'synthesis': return 'Synthesis & Recommendation'
+      default: return 'Interview'
+    }
+  }
+
+  // Sample exhibits (in real app, fetch from database)
+  const sampleExhibits = [
+    {
+      id: '1',
+      title: 'Market Size Analysis',
+      type: 'chart' as const,
+      data: {},
+    },
+    {
+      id: '2',
+      title: 'Revenue Breakdown',
+      type: 'table' as const,
+      data: {},
+    },
+  ]
+
   return (
     <div className="vs-screen">
       {/* Header */}
@@ -455,7 +523,22 @@ export function VoiceSessionV2({ caseData, interviewId, userId }: VoiceSessionPr
         <p style={{ fontSize: '0.875rem', color: '#555' }}>
           {caseData.industry} • {caseData.difficulty}
         </p>
+        <div style={{
+          marginTop: '0.5rem',
+          padding: '0.25rem 0.75rem',
+          backgroundColor: '#F6C342',
+          color: '#3A3A3A',
+          borderRadius: '1rem',
+          fontSize: '0.75rem',
+          fontWeight: 500,
+          display: 'inline-block',
+        }}>
+          {getStageLabel()}
+        </div>
       </div>
+
+      {/* Data Exhibits Slideover */}
+      <DataExhibitSlideover exhibits={sampleExhibits} />
 
       {/* End Interview Button */}
       <button
