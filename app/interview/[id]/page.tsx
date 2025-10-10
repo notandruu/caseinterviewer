@@ -1,7 +1,9 @@
 import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
 import { VoiceInterviewClient } from "@/components/voice-interview-client"
+import { VoiceSessionV2 } from "@/components/VoiceSession/VoiceSessionV2"
 import { getMockSession, getMockUser } from "@/lib/auth/mock-auth"
+import { isV2Enabled } from "@/lib/config/features"
 
 export default async function InterviewPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -46,5 +48,8 @@ export default async function InterviewPage({ params }: { params: Promise<{ id: 
     interviewId = interview.id
   }
 
-  return <VoiceInterviewClient caseData={caseData} interviewId={interviewId} userId={mockUser.id} />
+  // Feature flag: use V2 if enabled, otherwise V1 (default)
+  const InterviewComponent = isV2Enabled() ? VoiceSessionV2 : VoiceInterviewClient
+
+  return <InterviewComponent caseData={caseData} interviewId={interviewId} userId={mockUser.id} />
 }
