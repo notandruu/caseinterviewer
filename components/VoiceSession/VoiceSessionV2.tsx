@@ -23,6 +23,7 @@ export function VoiceSessionV2({ caseData, interviewId, userId }: VoiceSessionPr
   const [processingCaption, setProcessingCaption] = useState('contemplating…')
   const [isRecording, setIsRecording] = useState(false)
   const [ttsEnergy, setTtsEnergy] = useState(0.5) // For orb pulse during TTS
+  const [displayedText, setDisplayedText] = useState('') // For synchronized text animation
 
   const router = useRouter()
   const supabase = createClient()
@@ -38,6 +39,7 @@ export function VoiceSessionV2({ caseData, interviewId, userId }: VoiceSessionPr
   const ttsAnalyserRef = useRef<AnalyserNode | null>(null)
   const ttsAnimationRef = useRef<number>()
   const ELEVEN_DEFAULT_VOICE = useRef<string>('pNInz6obpgDQGcFmaJgB') // Adam
+  const textAnimationRef = useRef<NodeJS.Timeout | null>(null)
 
   const startTimeRef = useRef<Date>(new Date())
   const silenceStartRef = useRef<number | null>(null)
@@ -177,6 +179,30 @@ export function VoiceSessionV2({ caseData, interviewId, userId }: VoiceSessionPr
     speakText(caseData.prompt)
   }
 
+  const animateTextSync = (text: string, durationMs: number) => {
+    // Clear any existing animation
+    if (textAnimationRef.current) {
+      clearInterval(textAnimationRef.current)
+    }
+
+    const words = text.split(' ')
+    const msPerWord = durationMs / words.length
+    let currentIndex = 0
+
+    setDisplayedText('')
+
+    textAnimationRef.current = setInterval(() => {
+      if (currentIndex < words.length) {
+        setDisplayedText(words.slice(0, currentIndex + 1).join(' '))
+        currentIndex++
+      } else {
+        if (textAnimationRef.current) {
+          clearInterval(textAnimationRef.current)
+        }
+      }
+    }, msPerWord)
+  }
+
   const speakText = async (text: string) => {
     logEvent('tts_start', { text_length: text.length })
 
@@ -203,6 +229,15 @@ export function VoiceSessionV2({ caseData, interviewId, userId }: VoiceSessionPr
 
         audioElementRef.current.src = url
 
+        // Wait for metadata to load to get duration
+        audioElementRef.current.onloadedmetadata = () => {
+          if (audioElementRef.current) {
+            const durationMs = audioElementRef.current.duration * 1000
+            // Start text animation synchronized with audio duration
+            animateTextSync(text, durationMs)
+          }
+        }
+
         // Animate orb energy during playback
         let energyInterval: NodeJS.Timeout | null = null
 
@@ -215,7 +250,9 @@ export function VoiceSessionV2({ caseData, interviewId, userId }: VoiceSessionPr
 
         audioElementRef.current.onended = () => {
           if (energyInterval) clearInterval(energyInterval)
+          if (textAnimationRef.current) clearInterval(textAnimationRef.current)
           setTtsEnergy(0.5)
+          setDisplayedText(text) // Show full text at end
           logEvent('tts_end')
           dispatch({ type: 'TTS_END' })
         }
@@ -241,9 +278,16 @@ export function VoiceSessionV2({ caseData, interviewId, userId }: VoiceSessionPr
     utterance.rate = 0.95
     utterance.pitch = 1
 
+    // Estimate duration: ~150 words per minute at 0.95 rate
+    const wordCount = text.split(' ').length
+    const estimatedDurationMs = (wordCount / 150) * 60 * 1000 * (1 / 0.95)
+
     let energyInterval: NodeJS.Timeout | null = null
 
     utterance.onstart = () => {
+      // Start text animation with estimated duration
+      animateTextSync(text, estimatedDurationMs)
+
       energyInterval = setInterval(() => {
         const energy = 0.4 + Math.random() * 0.5
         setTtsEnergy(energy)
@@ -252,13 +296,16 @@ export function VoiceSessionV2({ caseData, interviewId, userId }: VoiceSessionPr
 
     utterance.onend = () => {
       if (energyInterval) clearInterval(energyInterval)
+      if (textAnimationRef.current) clearInterval(textAnimationRef.current)
       setTtsEnergy(0.5)
+      setDisplayedText(text) // Show full text at end
       logEvent('tts_end')
       dispatch({ type: 'TTS_END' })
     }
 
     utterance.onerror = (e) => {
       if (energyInterval) clearInterval(energyInterval)
+      if (textAnimationRef.current) clearInterval(textAnimationRef.current)
       setTtsEnergy(0.5)
       logEvent('tts_error', { error: e.error })
     }
@@ -393,7 +440,10 @@ export function VoiceSessionV2({ caseData, interviewId, userId }: VoiceSessionPr
   }
 
   const latestMessage = messages[messages.length - 1]
-  const displayText = currentTranscript || latestMessage?.content || ''
+  // Show animated text when agent is speaking, user transcript when listening, or latest message
+  const displayText = sessionState === 'agent_speaking'
+    ? displayedText
+    : currentTranscript || latestMessage?.content || ''
 
   return (
     <div className="vs-screen">
@@ -436,9 +486,11 @@ export function VoiceSessionV2({ caseData, interviewId, userId }: VoiceSessionPr
           <MicVisualizer analyser={analyserRef.current} isActive={isRecording} />
         )}
 
-        {/* Transcript Display */}
-        <div className="vs-transcript-line vs-fade-in">
-          {displayText}
+        {/* Transcript Display with horizontal fade */}
+        <div className="vs-transcript-container">
+          <div className="vs-transcript-line vs-fade-in">
+            {displayText}
+          </div>
         </div>
 
         {/* Caption */}

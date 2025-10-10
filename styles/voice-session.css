@@ -106,13 +106,51 @@
   padding: 2rem;
 }
 
+/* Transcript container with horizontal fade */
+.vs-transcript-container {
+  position: relative;
+  width: 100%;
+  max-width: 48rem;
+  overflow: hidden;
+  padding: 0 1rem;
+  margin: 1.5rem 0;
+}
+
+.vs-transcript-container::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 8rem;
+  background: linear-gradient(to right, var(--vs-white), transparent);
+  pointer-events: none;
+  z-index: 1;
+}
+
+.vs-transcript-container::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 4rem;
+  background: linear-gradient(to left, var(--vs-white), transparent);
+  pointer-events: none;
+  z-index: 1;
+}
+
 .vs-transcript-line {
   color: var(--vs-grey);
   font-size: 1.125rem;
   line-height: 1.75;
   text-align: center;
-  max-width: 42rem;
-  margin: 1.5rem 0;
+  white-space: nowrap;
+  overflow: visible;
+  min-height: 3.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .vs-caption {
