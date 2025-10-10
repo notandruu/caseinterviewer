@@ -6,17 +6,23 @@ import { Mic } from 'lucide-react'
 import { AgentOrb } from './AgentOrb'
 import { MicVisualizer } from './MicVisualizer'
 import { VoiceSessionProps, TranscriptMessage } from './types'
-import { reducer, INITIAL_STATE, getProcessingCaption } from './state'
+import { reducer, INITIAL_STATE, getProcessingCaption, getStateCaption } from './state'
 import { getMicStream, createAudioAnalyzer, createRMSMeter, createSilenceDetector } from '@/lib/audio/analyzer'
 import { createClient } from '@/lib/supabase/client'
 import '../../styles/voice-session.css'
+
+// Telemetry logger
+function logEvent(event: string, data?: Record<string, any>) {
+  console.log(`[VoiceSession] ${event}`, data || '')
+}
 
 export function VoiceSessionV2({ caseData, interviewId, userId }: VoiceSessionProps) {
   const [sessionState, dispatch] = useReducer(reducer, INITIAL_STATE)
   const [messages, setMessages] = useState<TranscriptMessage[]>([])
   const [currentTranscript, setCurrentTranscript] = useState('')
-  const [processingCaption, setProcessingCaption] = useState('thinking…')
+  const [processingCaption, setProcessingCaption] = useState('contemplating…')
   const [isRecording, setIsRecording] = useState(false)
+  const [ttsEnergy, setTtsEnergy] = useState(0.5) // For orb pulse during TTS
 
   const router = useRouter()
   const supabase = createClient()
@@ -29,8 +35,11 @@ export function VoiceSessionV2({ caseData, interviewId, userId }: VoiceSessionPr
   const audioElementRef = useRef<HTMLAudioElement | null>(null)
   const silenceDetectorRef = useRef<ReturnType<typeof createSilenceDetector> | null>(null)
   const rmsGetterRef = useRef<(() => number) | null>(null)
+  const ttsAnalyserRef = useRef<AnalyserNode | null>(null)
+  const ttsAnimationRef = useRef<number>()
 
   const startTimeRef = useRef<Date>(new Date())
+  const silenceStartRef = useRef<number | null>(null)
 
   // Initialize audio and speech recognition
   useEffect(() => {
@@ -120,13 +129,28 @@ export function VoiceSessionV2({ caseData, interviewId, userId }: VoiceSessionPr
 
     const interval = setInterval(() => {
       if (silenceDetectorRef.current?.checkSilence()) {
-        console.log('[VoiceSessionV2] Silence detected')
+        const silenceDuration = silenceStartRef.current
+          ? Date.now() - silenceStartRef.current
+          : 0
+
+        logEvent('silence_detected', { duration_ms: silenceDuration })
         dispatch({ type: 'SILENCE_DETECTED' })
         setProcessingCaption(getProcessingCaption())
+        silenceStartRef.current = null
+      } else if (!silenceStartRef.current && rmsGetterRef.current) {
+        const rms = rmsGetterRef.current()
+        if (rms < 0.01) {
+          silenceStartRef.current = Date.now()
+        }
       }
     }, 100)
 
     return () => clearInterval(interval)
+  }, [sessionState])
+
+  // Track state changes
+  useEffect(() => {
+    logEvent('state_change', { new_state: sessionState })
   }, [sessionState])
 
   // Auto-start/stop recording based on state
@@ -149,7 +173,9 @@ export function VoiceSessionV2({ caseData, interviewId, userId }: VoiceSessionPr
   }
 
   const speakText = (text: string) => {
-    if (!synthRef.current) return
+    if (!synthRef.current || !audioContextRef.current) return
+
+    logEvent('tts_start', { text_length: text.length })
 
     synthRef.current.cancel()
     const utterance = new SpeechSynthesisUtterance(text)
@@ -157,8 +183,35 @@ export function VoiceSessionV2({ caseData, interviewId, userId }: VoiceSessionPr
     utterance.rate = 0.95
     utterance.pitch = 1
 
+    // Animate orb energy during TTS
+    // Note: Web Speech API doesn't provide audio stream for analysis,
+    // so we simulate energy based on speech timing
+    let energyInterval: NodeJS.Timeout | null = null
+
+    utterance.onstart = () => {
+      // Simulate energy pulses during speech
+      energyInterval = setInterval(() => {
+        // Randomize energy between 0.4 and 0.9 to create pulse effect
+        const energy = 0.4 + Math.random() * 0.5
+        setTtsEnergy(energy)
+      }, 150) // Update every 150ms for smooth pulse
+    }
+
     utterance.onend = () => {
+      if (energyInterval) {
+        clearInterval(energyInterval)
+      }
+      setTtsEnergy(0.5) // Reset to neutral
+      logEvent('tts_end')
       dispatch({ type: 'TTS_END' })
+    }
+
+    utterance.onerror = (e) => {
+      if (energyInterval) {
+        clearInterval(energyInterval)
+      }
+      setTtsEnergy(0.5)
+      logEvent('tts_error', { error: e.error })
     }
 
     synthRef.current.speak(utterance)
@@ -170,6 +223,8 @@ export function VoiceSessionV2({ caseData, interviewId, userId }: VoiceSessionPr
       recognitionRef.current.start()
       setIsRecording(true)
       silenceDetectorRef.current?.reset()
+      silenceStartRef.current = null
+      logEvent('mic_start')
     } catch (error) {
       // Already started
     }
@@ -180,6 +235,7 @@ export function VoiceSessionV2({ caseData, interviewId, userId }: VoiceSessionPr
     try {
       recognitionRef.current.stop()
       setIsRecording(false)
+      logEvent('mic_end')
     } catch (error) {
       // Already stopped
     }
@@ -196,6 +252,9 @@ export function VoiceSessionV2({ caseData, interviewId, userId }: VoiceSessionPr
   }
 
   const fetchAIResponse = async (userInput: string) => {
+    const startTime = Date.now()
+    logEvent('llm_start', { input_length: userInput.length })
+
     try {
       const res = await fetch('/api/interview/chat', {
         method: 'POST',
@@ -213,6 +272,9 @@ export function VoiceSessionV2({ caseData, interviewId, userId }: VoiceSessionPr
         throw new Error('No response from API')
       }
 
+      const duration = Date.now() - startTime
+      logEvent('llm_end', { duration_ms: duration, response_length: data.message.length })
+
       const aiMessage: TranscriptMessage = {
         role: 'assistant',
         content: data.message,
@@ -224,6 +286,7 @@ export function VoiceSessionV2({ caseData, interviewId, userId }: VoiceSessionPr
       speakText(data.message)
     } catch (error) {
       console.error('[VoiceSessionV2] AI response error:', error)
+      logEvent('llm_error', { duration_ms: Date.now() - startTime, error: String(error) })
       const errorMessage = "Let's try that again. Could you please repeat your response?"
       const aiMessage: TranscriptMessage = {
         role: 'assistant',
@@ -313,7 +376,7 @@ export function VoiceSessionV2({ caseData, interviewId, userId }: VoiceSessionPr
       {/* Main content */}
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3rem' }}>
         {/* Agent Orb */}
-        <AgentOrb mode={sessionState} energy={0.7} />
+        <AgentOrb mode={sessionState} energy={ttsEnergy} />
 
         {/* Mic Visualizer */}
         {sessionState === 'user_listening' && (
@@ -326,7 +389,9 @@ export function VoiceSessionV2({ caseData, interviewId, userId }: VoiceSessionPr
         </div>
 
         {/* Caption */}
-        <div className="vs-caption">{getCaption()}</div>
+        <div className="vs-caption" aria-live="polite" aria-atomic="true">
+          {getCaption()}
+        </div>
 
         {/* Mic Button */}
         <button
@@ -338,7 +403,18 @@ export function VoiceSessionV2({ caseData, interviewId, userId }: VoiceSessionPr
               startRecording()
             }
           }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault()
+              if (isRecording) {
+                stopRecording()
+              } else {
+                startRecording()
+              }
+            }
+          }}
           aria-label={isRecording ? 'Stop recording' : 'Start recording'}
+          aria-pressed={isRecording}
         >
           <Mic size={28} />
         </button>
