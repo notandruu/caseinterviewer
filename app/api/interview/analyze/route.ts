@@ -1,3 +1,4 @@
+import { openai } from "@ai-sdk/openai"
 import { generateText } from "ai"
 import { createClient } from "@/lib/supabase/server"
 
@@ -28,7 +29,7 @@ Keep your analysis brief and actionable. Return JSON format:
 }`
 
     const { text } = await generateText({
-      model: "openai/gpt-4o-mini",
+      model: openai("gpt-4.5-preview"),
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: `Candidate said: "${userMessage}"` },
