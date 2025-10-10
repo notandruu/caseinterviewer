@@ -37,6 +37,7 @@ export function VoiceSessionV2({ caseData, interviewId, userId }: VoiceSessionPr
   const rmsGetterRef = useRef<(() => number) | null>(null)
   const ttsAnalyserRef = useRef<AnalyserNode | null>(null)
   const ttsAnimationRef = useRef<number>()
+  const ELEVEN_DEFAULT_VOICE = useRef<string>('pNInz6obpgDQGcFmaJgB') // Adam
 
   const startTimeRef = useRef<Date>(new Date())
   const silenceStartRef = useRef<number | null>(null)
@@ -120,6 +121,10 @@ export function VoiceSessionV2({ caseData, interviewId, userId }: VoiceSessionPr
       recognitionRef.current?.stop()
       synthRef.current?.cancel()
       audioContextRef.current?.close()
+      if (audioElementRef.current) {
+        audioElementRef.current.pause()
+        audioElementRef.current.src = ''
+      }
     }
   }, [])
 
@@ -172,10 +177,63 @@ export function VoiceSessionV2({ caseData, interviewId, userId }: VoiceSessionPr
     speakText(caseData.prompt)
   }
 
-  const speakText = (text: string) => {
-    if (!synthRef.current || !audioContextRef.current) return
-
+  const speakText = async (text: string) => {
     logEvent('tts_start', { text_length: text.length })
+
+    try {
+      // Try ElevenLabs first
+      const res = await fetch('/api/tts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          text,
+          voice_id: ELEVEN_DEFAULT_VOICE.current,
+          model_id: 'eleven_turbo_v2',
+        }),
+      })
+
+      const contentType = res.headers.get('content-type') || ''
+      if (res.ok && contentType.includes('audio')) {
+        const blob = await res.blob()
+        const url = URL.createObjectURL(blob)
+
+        if (!audioElementRef.current) {
+          audioElementRef.current = new Audio()
+        }
+
+        audioElementRef.current.src = url
+
+        // Animate orb energy during playback
+        let energyInterval: NodeJS.Timeout | null = null
+
+        audioElementRef.current.onplay = () => {
+          energyInterval = setInterval(() => {
+            const energy = 0.4 + Math.random() * 0.5
+            setTtsEnergy(energy)
+          }, 150)
+        }
+
+        audioElementRef.current.onended = () => {
+          if (energyInterval) clearInterval(energyInterval)
+          setTtsEnergy(0.5)
+          logEvent('tts_end')
+          dispatch({ type: 'TTS_END' })
+        }
+
+        await audioElementRef.current.play()
+        return
+      }
+
+      console.warn('[VoiceSessionV2] TTS not audio, falling back to Web Speech API')
+      playLocalTTS(text)
+    } catch (error) {
+      console.error('[VoiceSessionV2] ElevenLabs TTS failed, falling back:', error)
+      playLocalTTS(text)
+    }
+  }
+
+  const playLocalTTS = (text: string) => {
+    if (!synthRef.current) return
 
     synthRef.current.cancel()
     const utterance = new SpeechSynthesisUtterance(text)
@@ -183,33 +241,24 @@ export function VoiceSessionV2({ caseData, interviewId, userId }: VoiceSessionPr
     utterance.rate = 0.95
     utterance.pitch = 1
 
-    // Animate orb energy during TTS
-    // Note: Web Speech API doesn't provide audio stream for analysis,
-    // so we simulate energy based on speech timing
     let energyInterval: NodeJS.Timeout | null = null
 
     utterance.onstart = () => {
-      // Simulate energy pulses during speech
       energyInterval = setInterval(() => {
-        // Randomize energy between 0.4 and 0.9 to create pulse effect
         const energy = 0.4 + Math.random() * 0.5
         setTtsEnergy(energy)
-      }, 150) // Update every 150ms for smooth pulse
+      }, 150)
     }
 
     utterance.onend = () => {
-      if (energyInterval) {
-        clearInterval(energyInterval)
-      }
-      setTtsEnergy(0.5) // Reset to neutral
+      if (energyInterval) clearInterval(energyInterval)
+      setTtsEnergy(0.5)
       logEvent('tts_end')
       dispatch({ type: 'TTS_END' })
     }
 
     utterance.onerror = (e) => {
-      if (energyInterval) {
-        clearInterval(energyInterval)
-      }
+      if (energyInterval) clearInterval(energyInterval)
       setTtsEnergy(0.5)
       logEvent('tts_error', { error: e.error })
     }
@@ -302,6 +351,10 @@ export function VoiceSessionV2({ caseData, interviewId, userId }: VoiceSessionPr
   const endInterview = async () => {
     stopRecording()
     synthRef.current?.cancel()
+    if (audioElementRef.current) {
+      audioElementRef.current.pause()
+      audioElementRef.current.src = ''
+    }
 
     const duration = Math.floor((Date.now() - startTimeRef.current.getTime()) / 1000)
 
