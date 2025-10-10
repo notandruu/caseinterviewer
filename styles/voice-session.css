@@ -145,12 +145,15 @@
   font-size: 1.125rem;
   line-height: 1.75;
   text-align: center;
-  white-space: nowrap;
-  overflow: visible;
-  min-height: 3.5rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  white-space: normal;
+  word-wrap: break-word;
+  overflow: hidden;
+  min-height: 5.25rem; /* 3 lines at 1.75 line-height */
+  max-height: 5.25rem;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  padding: 0 2rem;
 }
 
 .vs-caption {
