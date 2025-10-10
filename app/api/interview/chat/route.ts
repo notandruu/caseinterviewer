@@ -60,7 +60,7 @@ Critical Rules:
 Remember: Real MBB interviews are FAST. Test their ability to think on their feet under pressure.`
 
     const { text } = await generateText({
-      model: openai("gpt-4.5-preview"),
+      model: openai("gpt-4o"),
       messages: [
         { role: "system", content: systemPrompt },
         ...messages.map((m: any) => ({
