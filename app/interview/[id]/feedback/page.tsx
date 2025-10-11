@@ -1,5 +1,9 @@
-import { redirect } from "next/navigation"
-import { createClient } from "@/lib/supabase/server"
+'use client'
+
+import { useEffect, useState } from "react"
+import { useRouter } from "next/navigation"
+import { useEcho } from "@merit-systems/echo-react-sdk"
+import { createClient } from "@/lib/supabase/client"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
@@ -7,53 +11,113 @@ import { PerformanceRadarChart } from "@/components/performance-radar-chart"
 import { TrendChart } from "@/components/trend-chart"
 import Link from "next/link"
 import { CheckCircle2, AlertCircle, TrendingUp, Clock } from "lucide-react"
-import { isEchoAuthenticated, getEchoUserId } from "@/lib/auth/echo-auth"
 
-export default async function FeedbackPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params
+export default function FeedbackPage({ params }: { params: { id: string } }) {
+  const router = useRouter()
+  const { isLoggedIn, isLoading, user } = useEcho()
+  const [interview, setInterview] = useState<any>(null)
+  const [trendData, setTrendData] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const supabase = createClient()
 
-  const isAuthenticated = await isEchoAuthenticated()
-  if (!isAuthenticated) {
-    redirect("/auth/login")
+  useEffect(() => {
+    if (!isLoading && !isLoggedIn) {
+      router.push('/auth/login')
+    }
+  }, [isLoggedIn, isLoading, router])
+
+  useEffect(() => {
+    if (!user?.id || !params.id) return
+
+    async function fetchFeedback() {
+      try {
+        // Fetch interview with feedback
+        const { data: interviewData } = await supabase
+          .from("interviews")
+          .select("*, cases(*), feedback(*)")
+          .eq("id", params.id)
+          .maybeSingle()
+
+        if (!interviewData || interviewData.user_id !== user.id) {
+          router.push("/dashboard")
+          return
+        }
+
+        // If no feedback, generate it
+        if (!interviewData.feedback || interviewData.feedback.length === 0) {
+          await generateFeedback(params.id, interviewData)
+          // Refetch after generation
+          const { data: updatedInterview } = await supabase
+            .from("interviews")
+            .select("*, cases(*), feedback(*)")
+            .eq("id", params.id)
+            .maybeSingle()
+          setInterview(updatedInterview)
+        } else {
+          setInterview(interviewData)
+        }
+
+        // Fetch trend data
+        const { data: allInterviews } = await supabase
+          .from("interviews")
+          .select("*, feedback(*)")
+          .eq("user_id", user.id)
+          .eq("status", "completed")
+          .order("completed_at", { ascending: true })
+
+        const trend =
+          allInterviews?.map((int: any) => ({
+            date: new Date(int.completed_at).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+            score: int.feedback?.[0]?.overall_score || 0,
+          })) || []
+
+        setTrendData(trend)
+        setLoading(false)
+      } catch (err) {
+        console.error("[Feedback] Error:", err)
+        setLoading(false)
+      }
+    }
+
+    fetchFeedback()
+  }, [user?.id, params.id])
+
+  async function generateFeedback(interviewId: string, interviewData: any) {
+    const structureScore = Math.floor(Math.random() * 20) + 75
+    const analysisScore = Math.floor(Math.random() * 20) + 70
+    const communicationScore = Math.floor(Math.random() * 20) + 80
+    const overallScore = Math.floor((structureScore + analysisScore + communicationScore) / 3)
+
+    await supabase.from("feedback").insert({
+      interview_id: interviewId,
+      overall_score: overallScore,
+      structure_score: structureScore,
+      analysis_score: analysisScore,
+      communication_score: communicationScore,
+      strengths: [
+        "Clear and logical problem-solving approach",
+        "Strong quantitative reasoning skills",
+        "Effective communication of complex ideas",
+      ],
+      areas_for_improvement: [
+        "Consider asking more clarifying questions upfront",
+        "Develop deeper hypotheses before diving into analysis",
+        "Practice synthesizing findings more concisely",
+      ],
+      detailed_feedback:
+        "You demonstrated a solid understanding of case interview fundamentals. Your structure was well-organized and you communicated your thoughts clearly. To improve further, focus on asking more probing questions at the beginning to fully understand the problem scope. Your quantitative analysis was strong, but consider taking more time to develop hypotheses before jumping into calculations. Overall, this was a strong performance that shows you're on the right track.",
+    })
   }
 
-  const userId = await getEchoUserId()
-  if (!userId) {
-    redirect("/auth/login")
-  }
-
-  // For real interviews, use database
-  const supabase = await createClient()
-
-  const { data: interview } = await supabase
-    .from("interviews")
-    .select("*, cases(*), feedback(*)")
-    .eq("id", id)
-    .maybeSingle()
-
-  if (!interview || interview.user_id !== userId) {
-    redirect("/dashboard")
+  if (isLoading || loading || !interview) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-white">
+        <div className="h-3 w-3 rounded-full bg-[#2196F3] animate-pulse" />
+      </div>
+    )
   }
 
   const feedback = interview.feedback?.[0]
-
-  if (!feedback) {
-    await generateFeedback(id, interview, supabase)
-    redirect(`/interview/${id}/feedback`)
-  }
-
-  const { data: allInterviews } = await supabase
-    .from("interviews")
-    .select("*, feedback(*)")
-    .eq("user_id", userId)
-    .eq("status", "completed")
-    .order("completed_at", { ascending: true })
-
-  const trendData =
-    allInterviews?.map((int: any) => ({
-      date: new Date(int.completed_at).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
-      score: int.feedback?.[0]?.overall_score || 0,
-    })) || []
 
   return renderFeedbackPage(interview, feedback, trendData)
 }

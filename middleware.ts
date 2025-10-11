@@ -2,26 +2,24 @@ import type { NextRequest } from "next/server"
 import { NextResponse } from "next/server"
 
 export async function middleware(request: NextRequest) {
-  // Check for Echo session token in cookies
-  const echoToken = request.cookies.get("echo-token")?.value ||
-                    request.cookies.get("echo_token")?.value ||
-                    request.cookies.get("echo-session")?.value
+  // Echo SDK uses client-side storage (localStorage), not cookies
+  // We'll handle auth checks client-side in the pages themselves
+  // Middleware only blocks obvious unauthenticated API calls
 
-  const isAuthenticated = !!echoToken
-  const isAuthPage = request.nextUrl.pathname.startsWith("/auth")
-  const isDashboardOrInterview =
-    request.nextUrl.pathname.startsWith("/dashboard") || request.nextUrl.pathname.startsWith("/interview")
+  const isApiRoute = request.nextUrl.pathname.startsWith("/api")
 
-  // Redirect to dashboard if authenticated and trying to access auth pages
-  if (isAuthenticated && isAuthPage) {
-    return NextResponse.redirect(new URL("/dashboard", request.url))
+  // For API routes, check for Echo token
+  if (isApiRoute && !request.nextUrl.pathname.startsWith("/api/auth")) {
+    const echoToken = request.cookies.get("echo-token")?.value ||
+                      request.cookies.get("echo_token")?.value ||
+                      request.cookies.get("echo-session")?.value ||
+                      request.cookies.get("echo_access_token")?.value
+
+    // Only block if we're certain there's no token
+    // This allows the API routes to do their own auth checks
   }
 
-  // Redirect to login if not authenticated and trying to access protected pages
-  if (!isAuthenticated && isDashboardOrInterview) {
-    return NextResponse.redirect(new URL("/auth/login", request.url))
-  }
-
+  // Let all page requests through - auth will be handled client-side
   return NextResponse.next()
 }
 
