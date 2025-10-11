@@ -114,13 +114,13 @@ export default function PricingPage() {
             <CardHeader>
               <div>
                 <CardTitle className="text-2xl text-blue-600">Pro</CardTitle>
-                <CardDescription className="mt-2">Pay-as-you-go for flexible practice</CardDescription>
+                <CardDescription className="mt-2">Pay only for what you use</CardDescription>
               </div>
               <div className="mt-4">
-                <span className="text-4xl font-bold">Pay per use</span>
+                <span className="text-4xl font-bold">Usage-based</span>
               </div>
               <div className="mt-2">
-                <span className="text-sm text-gray-600">$5 per case interview • Powered by Echo</span>
+                <span className="text-sm text-gray-600">Charged per AI API call • Powered by Echo</span>
               </div>
             </CardHeader>
             <CardContent>
@@ -134,19 +134,19 @@ export default function PricingPage() {
                 <ul className="space-y-3">
                   <li className="flex items-start gap-2">
                     <Check className="h-5 w-5 text-blue-600 mt-0.5 flex-shrink-0" />
-                    <span className="text-gray-700"><strong>Usage-based</strong> pricing</span>
+                    <span className="text-gray-700"><strong>Pay per API call</strong> - transparent pricing</span>
                   </li>
                   <li className="flex items-start gap-2">
                     <Check className="h-5 w-5 text-blue-600 mt-0.5 flex-shrink-0" />
-                    <span className="text-gray-700">AI interviewer with voice</span>
+                    <span className="text-gray-700">AI interviewer with voice (each message billed)</span>
                   </li>
                   <li className="flex items-start gap-2">
                     <Check className="h-5 w-5 text-blue-600 mt-0.5 flex-shrink-0" />
-                    <span className="text-gray-700">Automated feedback</span>
+                    <span className="text-gray-700">AI-powered feedback generation</span>
                   </li>
                   <li className="flex items-start gap-2">
                     <Check className="h-5 w-5 text-blue-600 mt-0.5 flex-shrink-0" />
-                    <span className="text-gray-700">Progress tracking</span>
+                    <span className="text-gray-700">No monthly commitment</span>
                   </li>
                   <li className="flex items-start gap-2">
                     <Check className="h-5 w-5 text-blue-600 mt-0.5 flex-shrink-0" />
@@ -197,20 +197,22 @@ export default function PricingPage() {
               </CardHeader>
               <CardContent>
                 <p className="text-gray-700">
-                  After using your 3 free cases, you'll pay $5 per additional case interview.
-                  This usage-based pricing lets you practice at your own pace without monthly commitments.
+                  After your 3 free cases, you'll need to add funds to your Echo account. You'll only be charged for
+                  the AI API calls you make during interviews - each message exchange with the AI interviewer and
+                  feedback generation are billed separately based on actual usage.
                 </p>
               </CardContent>
             </Card>
 
             <Card>
               <CardHeader>
-                <CardTitle className="text-lg">How does usage-based pricing work?</CardTitle>
+                <CardTitle className="text-lg">How does API-based pricing work?</CardTitle>
               </CardHeader>
               <CardContent>
                 <p className="text-gray-700">
-                  Simply add funds to your account through Echo, and you'll be charged $5 per case interview you complete.
-                  No subscriptions, no monthly fees - just pay for what you use.
+                  Add funds to your Echo account and you'll be charged only for the AI services you use:
+                  each conversation turn with the AI interviewer and AI-generated feedback.
+                  No subscriptions, no monthly fees - complete transparency on what you pay for.
                 </p>
               </CardContent>
             </Card>
