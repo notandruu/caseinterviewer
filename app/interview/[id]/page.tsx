@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from "react"
+import { use, useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { useEcho } from "@merit-systems/echo-react-sdk"
 import { createClient } from "@/lib/supabase/client"
@@ -8,13 +8,16 @@ import { VoiceInterviewClient } from "@/components/voice-interview-client"
 import { VoiceSessionV2 } from "@/components/VoiceSession/VoiceSessionV2"
 import { isV2Enabled } from "@/lib/config/features"
 
-export default function InterviewPage({ params }: { params: { id: string } }) {
+export default function InterviewPage({ params }: { params: Promise<{ id: string }> }) {
   const router = useRouter()
   const { isLoggedIn, isLoading, user } = useEcho()
   const [caseData, setCaseData] = useState<any>(null)
   const [interviewId, setInterviewId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const supabase = createClient()
+
+  // Unwrap params using React.use()
+  const { id } = use(params)
 
   useEffect(() => {
     if (!isLoading && !isLoggedIn) {
@@ -23,7 +26,7 @@ export default function InterviewPage({ params }: { params: { id: string } }) {
   }, [isLoggedIn, isLoading, router])
 
   useEffect(() => {
-    if (!user?.id || !params.id) return
+    if (!user?.id || !id) return
 
     async function setupInterview() {
       try {
@@ -31,7 +34,7 @@ export default function InterviewPage({ params }: { params: { id: string } }) {
         const { data: fetchedCase, error: caseError } = await supabase
           .from("cases")
           .select("*")
-          .eq("id", params.id)
+          .eq("id", id)
           .single()
 
         if (caseError || !fetchedCase) {
@@ -47,7 +50,7 @@ export default function InterviewPage({ params }: { params: { id: string } }) {
           .from("interviews")
           .insert({
             user_id: user.id,
-            case_id: params.id,
+            case_id: id,
             status: "in-progress",
           })
           .select()
@@ -67,7 +70,7 @@ export default function InterviewPage({ params }: { params: { id: string } }) {
     }
 
     setupInterview()
-  }, [user?.id, params.id])
+  }, [user?.id, id])
 
   if (isLoading || !user || !caseData || !interviewId) {
     return (

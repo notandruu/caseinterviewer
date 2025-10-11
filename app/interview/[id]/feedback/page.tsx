@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from "react"
+import { use, useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { useEcho } from "@merit-systems/echo-react-sdk"
 import { createClient } from "@/lib/supabase/client"
@@ -12,13 +12,16 @@ import { TrendChart } from "@/components/trend-chart"
 import Link from "next/link"
 import { CheckCircle2, AlertCircle, TrendingUp, Clock } from "lucide-react"
 
-export default function FeedbackPage({ params }: { params: { id: string } }) {
+export default function FeedbackPage({ params }: { params: Promise<{ id: string }> }) {
   const router = useRouter()
   const { isLoggedIn, isLoading, user } = useEcho()
   const [interview, setInterview] = useState<any>(null)
   const [trendData, setTrendData] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const supabase = createClient()
+
+  // Unwrap params using React.use()
+  const { id } = use(params)
 
   useEffect(() => {
     if (!isLoading && !isLoggedIn) {
@@ -27,7 +30,7 @@ export default function FeedbackPage({ params }: { params: { id: string } }) {
   }, [isLoggedIn, isLoading, router])
 
   useEffect(() => {
-    if (!user?.id || !params.id) return
+    if (!user?.id || !id) return
 
     async function fetchFeedback() {
       try {
@@ -35,7 +38,7 @@ export default function FeedbackPage({ params }: { params: { id: string } }) {
         const { data: interviewData } = await supabase
           .from("interviews")
           .select("*, cases(*), feedback(*)")
-          .eq("id", params.id)
+          .eq("id", id)
           .maybeSingle()
 
         if (!interviewData || interviewData.user_id !== user.id) {
@@ -45,12 +48,12 @@ export default function FeedbackPage({ params }: { params: { id: string } }) {
 
         // If no feedback, generate it
         if (!interviewData.feedback || interviewData.feedback.length === 0) {
-          await generateFeedback(params.id, interviewData)
+          await generateFeedback(id, interviewData)
           // Refetch after generation
           const { data: updatedInterview } = await supabase
             .from("interviews")
             .select("*, cases(*), feedback(*)")
-            .eq("id", params.id)
+            .eq("id", id)
             .maybeSingle()
           setInterview(updatedInterview)
         } else {
@@ -80,7 +83,7 @@ export default function FeedbackPage({ params }: { params: { id: string } }) {
     }
 
     fetchFeedback()
-  }, [user?.id, params.id])
+  }, [user?.id, id])
 
   async function generateFeedback(interviewId: string, interviewData: any) {
     const structureScore = Math.floor(Math.random() * 20) + 75
