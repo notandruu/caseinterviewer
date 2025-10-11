@@ -11,24 +11,24 @@ export async function POST(req: Request) {
       apiKey: process.env.OPENAI_API_KEY,
     })
 
-    // Determine which section to use based on conversation history
-    const messageCount = messages.length
+    // Count only user messages to track interview progress
+    const userMessageCount = messages.filter((m: any) => m.role === 'user').length
     let sectionInstruction = ''
 
-    if (messageCount === 0) {
+    if (userMessageCount === 0) {
       // First message - case introduction
       sectionInstruction = 'This is the FIRST message. Find "1. Case Introduction" in the script below and speak ONLY that section word-for-word. Do not add anything else.'
-    } else if (messageCount <= 2) {
-      // Early in interview - structuring (messages 1-2)
-      sectionInstruction = 'The candidate just gave their response. Now move to "2. Structuring Prompt" in the script. Read it EXACTLY as written to ask them to structure their approach. Do NOT wait for more info - immediately present the structuring prompt.'
-    } else if (messageCount <= 6) {
-      // Mid interview - deeper exploration (messages 3-6)
-      sectionInstruction = 'The candidate responded. Now move to "3. Deeper Exploration" in the script. Present the next question from this section (Quant 1, Quant 2, or Brainstorm). If you already asked a question from this section, ask the NEXT one. Keep moving through the questions - do not wait.'
-    } else if (messageCount <= 8) {
-      // Late interview - recommendation (messages 7-8)
+    } else if (userMessageCount === 1) {
+      // After first user response - structuring
+      sectionInstruction = 'The candidate gave their first response. Now move to "2. Structuring Prompt" in the script. Read it EXACTLY as written to ask them to structure their approach. Do NOT wait for more info - immediately present the structuring prompt.'
+    } else if (userMessageCount >= 2 && userMessageCount <= 4) {
+      // Mid interview - deeper exploration (user messages 2-4)
+      sectionInstruction = 'The candidate responded to structuring. Now move to "3. Deeper Exploration" in the script. Present the next question from this section (Quant 1, Quant 2, or Brainstorm). If you already asked a question from this section, ask the NEXT one. Keep moving through the questions - do not wait.'
+    } else if (userMessageCount >= 5 && userMessageCount <= 6) {
+      // Late interview - recommendation (user messages 5-6)
       sectionInstruction = 'The candidate responded. Now move to "4. Recommendation Prompt" in the script. Ask them to synthesize everything and provide their final recommendation. Read the prompt EXACTLY as written.'
     } else {
-      // End - feedback (message 9+)
+      // End - feedback (user message 7+)
       sectionInstruction = 'Final stage. Find "5. Interviewer Feedback" in the script and provide your closing feedback based on their performance. Keep it concise and specific.'
     }
 
