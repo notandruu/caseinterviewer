@@ -49,7 +49,6 @@ export function VoiceSessionV2({ caseData, interviewId, userId }: VoiceSessionPr
   const audioContextRef = useRef<AudioContext | null>(null)
   const analyserRef = useRef<AnalyserNode | null>(null)
   const recognitionRef = useRef<any>(null)
-  const synthRef = useRef<SpeechSynthesis | null>(null)
   const audioElementRef = useRef<HTMLAudioElement | null>(null)
   const silenceDetectorRef = useRef<ReturnType<typeof createSilenceDetector> | null>(null)
   const rmsGetterRef = useRef<(() => number) | null>(null)
@@ -101,9 +100,6 @@ export function VoiceSessionV2({ caseData, interviewId, userId }: VoiceSessionPr
           recognitionRef.current = recognition
         }
 
-        // Initialize TTS
-        synthRef.current = window.speechSynthesis
-
         // Initialize audio analyzer
         const stream = await getMicStream()
         const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)()
@@ -138,7 +134,6 @@ export function VoiceSessionV2({ caseData, interviewId, userId }: VoiceSessionPr
 
     return () => {
       recognitionRef.current?.stop()
-      synthRef.current?.cancel()
       audioContextRef.current?.close()
       if (audioElementRef.current) {
         audioElementRef.current.pause()
@@ -247,7 +242,7 @@ export function VoiceSessionV2({ caseData, interviewId, userId }: VoiceSessionPr
     logEvent('tts_start', { text_length: text.length })
 
     try {
-      // Try ElevenLabs first
+      // Use ElevenLabs TTS only
       const res = await fetch('/api/tts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -258,99 +253,64 @@ export function VoiceSessionV2({ caseData, interviewId, userId }: VoiceSessionPr
         }),
       })
 
-      const contentType = res.headers.get('content-type') || ''
-      if (res.ok && contentType.includes('audio')) {
-        const blob = await res.blob()
-        const url = URL.createObjectURL(blob)
-
-        if (!audioElementRef.current) {
-          audioElementRef.current = new Audio()
-        }
-
-        audioElementRef.current.src = url
-
-        // Wait for metadata to load to get duration
-        audioElementRef.current.onloadedmetadata = () => {
-          if (audioElementRef.current) {
-            const durationMs = audioElementRef.current.duration * 1000
-            // Start text animation synchronized with audio duration
-            animateTextSync(text, durationMs)
-          }
-        }
-
-        // Animate orb energy during playback
-        let energyInterval: NodeJS.Timeout | null = null
-
-        audioElementRef.current.onplay = () => {
-          energyInterval = setInterval(() => {
-            const energy = 0.4 + Math.random() * 0.5
-            setTtsEnergy(energy)
-          }, 150)
-        }
-
-        audioElementRef.current.onended = () => {
-          if (energyInterval) clearInterval(energyInterval)
-          if (textAnimationRef.current) clearInterval(textAnimationRef.current)
-          setTtsEnergy(0.5)
-          setDisplayedText(text) // Show full text at end
-          logEvent('tts_end')
-          dispatch({ type: 'TTS_END' })
-        }
-
-        await audioElementRef.current.play()
-        return
+      if (!res.ok) {
+        throw new Error(`TTS API failed with status: ${res.status}`)
       }
 
-      console.warn('[VoiceSessionV2] TTS not audio, falling back to Web Speech API')
-      playLocalTTS(text)
+      const contentType = res.headers.get('content-type') || ''
+      if (!contentType.includes('audio')) {
+        throw new Error('TTS API did not return audio')
+      }
+
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+
+      if (!audioElementRef.current) {
+        audioElementRef.current = new Audio()
+      }
+
+      audioElementRef.current.src = url
+
+      // Wait for metadata to load to get duration
+      audioElementRef.current.onloadedmetadata = () => {
+        if (audioElementRef.current) {
+          const durationMs = audioElementRef.current.duration * 1000
+          // Start text animation synchronized with audio duration
+          animateTextSync(text, durationMs)
+        }
+      }
+
+      // Animate orb energy during playback
+      let energyInterval: NodeJS.Timeout | null = null
+
+      audioElementRef.current.onplay = () => {
+        energyInterval = setInterval(() => {
+          const energy = 0.4 + Math.random() * 0.5
+          setTtsEnergy(energy)
+        }, 150)
+      }
+
+      audioElementRef.current.onended = () => {
+        if (energyInterval) clearInterval(energyInterval)
+        if (textAnimationRef.current) clearInterval(textAnimationRef.current)
+        setTtsEnergy(0.5)
+        setDisplayedText(text) // Show full text at end
+        logEvent('tts_end')
+        dispatch({ type: 'TTS_END' })
+      }
+
+      audioElementRef.current.onerror = (e) => {
+        logEvent('audio_playback_error', { error: e })
+        console.error('[VoiceSessionV2] Audio playback error:', e)
+      }
+
+      await audioElementRef.current.play()
     } catch (error) {
-      console.error('[VoiceSessionV2] ElevenLabs TTS failed, falling back:', error)
-      playLocalTTS(text)
-    }
-  }
-
-  const playLocalTTS = (text: string) => {
-    if (!synthRef.current) return
-
-    synthRef.current.cancel()
-    const utterance = new SpeechSynthesisUtterance(text)
-    utterance.lang = 'en-US'
-    utterance.rate = 0.95
-    utterance.pitch = 1
-
-    // Estimate duration: ~150 words per minute at 0.95 rate
-    const wordCount = text.split(' ').length
-    const estimatedDurationMs = (wordCount / 150) * 60 * 1000 * (1 / 0.95)
-
-    let energyInterval: NodeJS.Timeout | null = null
-
-    utterance.onstart = () => {
-      // Start text animation with estimated duration
-      animateTextSync(text, estimatedDurationMs)
-
-      energyInterval = setInterval(() => {
-        const energy = 0.4 + Math.random() * 0.5
-        setTtsEnergy(energy)
-      }, 150)
-    }
-
-    utterance.onend = () => {
-      if (energyInterval) clearInterval(energyInterval)
-      if (textAnimationRef.current) clearInterval(textAnimationRef.current)
-      setTtsEnergy(0.5)
-      setDisplayedText(text) // Show full text at end
-      logEvent('tts_end')
+      console.error('[VoiceSessionV2] ElevenLabs TTS failed:', error)
+      logEvent('tts_error', { error: String(error) })
+      // Don't fallback - just log the error and continue
       dispatch({ type: 'TTS_END' })
     }
-
-    utterance.onerror = (e) => {
-      if (energyInterval) clearInterval(energyInterval)
-      if (textAnimationRef.current) clearInterval(textAnimationRef.current)
-      setTtsEnergy(0.5)
-      logEvent('tts_error', { error: e.error })
-    }
-
-    synthRef.current.speak(utterance)
   }
 
   const startRecording = () => {
@@ -464,7 +424,6 @@ export function VoiceSessionV2({ caseData, interviewId, userId }: VoiceSessionPr
 
   const endInterview = async () => {
     stopRecording()
-    synthRef.current?.cancel()
     if (audioElementRef.current) {
       audioElementRef.current.pause()
       audioElementRef.current.src = ''
