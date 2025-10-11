@@ -9,25 +9,28 @@ import Image from "next/image"
 
 export default function DashboardPage() {
   const router = useRouter()
-  const { isLoggedIn, isLoading, user, freeTierBalance, balance, signOut } = useEcho()
+  const { isLoggedIn, user, freeTierBalance, balance, signOut } = useEcho()
   const [cases, setCases] = useState<any[]>([])
   const supabase = createClient()
 
-  // Calculate subscription status
-  const freeCasesUsed = freeTierBalance?.used || 0
+  // For demo: Track free cases in localStorage
+  const [demoFreeCasesUsed, setDemoFreeCasesUsed] = useState(0)
+
+  // Calculate subscription status - for logged in users use Echo, for demo use localStorage
+  const freeCasesUsed = isLoggedIn ? (freeTierBalance?.used || 0) : demoFreeCasesUsed
   const freeCasesRemaining = Math.max(0, 3 - freeCasesUsed)
-  const isPro = balance && balance.amount > 0
+  const isPro = isLoggedIn && balance && balance.amount > 0
   const canStartCase = isPro || freeCasesRemaining > 0
 
+  // Load demo usage from localStorage on mount
   useEffect(() => {
-    if (!isLoading && !isLoggedIn) {
-      router.push('/auth/login')
+    if (!isLoggedIn) {
+      const stored = localStorage.getItem('demo-cases-used')
+      setDemoFreeCasesUsed(stored ? parseInt(stored) : 0)
     }
-  }, [isLoggedIn, isLoading, router])
+  }, [isLoggedIn])
 
   useEffect(() => {
-    if (!user?.id) return
-
     async function fetchCases() {
       const casesResult = await supabase
         .from("cases")
@@ -37,7 +40,7 @@ export default function DashboardPage() {
     }
 
     fetchCases()
-  }, [user?.id])
+  }, [])
 
   const handleStartCase = (caseId: string) => {
     if (!canStartCase) {
@@ -49,7 +52,8 @@ export default function DashboardPage() {
     router.push(`/interview/${caseId}`)
   }
 
-  if (isLoading || !user) {
+  // Show loading state only when data is being fetched
+  if (cases.length === 0) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-white">
         <div className="h-3 w-3 rounded-full bg-[#2196F3] animate-pulse" />
@@ -80,13 +84,15 @@ export default function DashboardPage() {
           </button>
         </div>
 
-        {/* Sign Out at Bottom */}
-        <button
-          onClick={() => signOut()}
-          className="mt-auto text-gray-400 hover:text-gray-700 transition-colors"
-        >
-          <LogOut className="h-5 w-5" />
-        </button>
+        {/* Sign Out at Bottom - only show if logged in */}
+        {isLoggedIn && (
+          <button
+            onClick={() => signOut()}
+            className="mt-auto text-gray-400 hover:text-gray-700 transition-colors"
+          >
+            <LogOut className="h-5 w-5" />
+          </button>
+        )}
       </aside>
 
       {/* Main Content */}
@@ -105,12 +111,21 @@ export default function DashboardPage() {
             </div>
           )}
 
-          {/* User Avatar */}
-          <div className="h-10 w-10 rounded-full bg-[#2196F3] flex items-center justify-center">
-            <span className="text-white font-semibold text-sm">
-              {user.email?.[0]?.toUpperCase() || 'U'}
-            </span>
-          </div>
+          {/* User Avatar or Sign In Button */}
+          {isLoggedIn ? (
+            <div className="h-10 w-10 rounded-full bg-[#2196F3] flex items-center justify-center">
+              <span className="text-white font-semibold text-sm">
+                {user?.email?.[0]?.toUpperCase() || 'U'}
+              </span>
+            </div>
+          ) : (
+            <button
+              onClick={() => router.push('/auth/login')}
+              className="px-4 py-2 text-sm font-medium text-[#2196F3] hover:bg-[#2196F3]/10 rounded-full border border-[#2196F3] transition-colors"
+            >
+              Sign In
+            </button>
+          )}
         </div>
 
         {/* Welcome Header */}

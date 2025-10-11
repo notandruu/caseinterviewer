@@ -20,13 +20,7 @@ export default function InterviewPage({ params }: { params: Promise<{ id: string
   const { id } = use(params)
 
   useEffect(() => {
-    if (!isLoading && !isLoggedIn) {
-      router.push('/auth/login')
-    }
-  }, [isLoggedIn, isLoading, router])
-
-  useEffect(() => {
-    if (!user?.id || !id) return
+    if (!id) return
 
     async function setupInterview() {
       try {
@@ -46,25 +40,37 @@ export default function InterviewPage({ params }: { params: Promise<{ id: string
         setCaseData(fetchedCase)
 
         // Create interview session
-        const { data: interview, error: interviewError } = await supabase
-          .from("interviews")
-          .insert({
-            user_id: user.id,
-            case_id: id,
-            status: "in-progress",
-          })
-          .select()
-          .single()
+        // For demo users (not logged in), generate a temporary ID
+        // For logged in users, create a database record
+        if (isLoggedIn && user?.id) {
+          const { data: interview, error: interviewError } = await supabase
+            .from("interviews")
+            .insert({
+              user_id: user.id,
+              case_id: id,
+              status: "in-progress",
+            })
+            .select()
+            .single()
 
-        if (interviewError || !interview) {
-          console.error("[Interview] Error creating interview:", interviewError)
-          console.error("[Interview] User ID:", user.id)
-          console.error("[Interview] Case ID:", id)
-          setError(`Failed to create interview session: ${interviewError?.message || 'Unknown error'}`)
-          return
+          if (interviewError || !interview) {
+            console.error("[Interview] Error creating interview:", interviewError)
+            console.error("[Interview] User ID:", user.id)
+            console.error("[Interview] Case ID:", id)
+            setError(`Failed to create interview session: ${interviewError?.message || 'Unknown error'}`)
+            return
+          }
+
+          setInterviewId(interview.id)
+        } else {
+          // Demo mode: Generate temporary interview ID
+          const tempId = `demo-${Date.now()}-${Math.random().toString(36).substring(7)}`
+          setInterviewId(tempId)
+
+          // Increment demo case counter in localStorage
+          const currentUsed = parseInt(localStorage.getItem('demo-cases-used') || '0')
+          localStorage.setItem('demo-cases-used', (currentUsed + 1).toString())
         }
-
-        setInterviewId(interview.id)
       } catch (err) {
         console.error("[Interview] Setup error:", err)
         setError("An error occurred")
@@ -72,9 +78,9 @@ export default function InterviewPage({ params }: { params: Promise<{ id: string
     }
 
     setupInterview()
-  }, [user?.id, id])
+  }, [id, isLoggedIn, user?.id])
 
-  if (isLoading || !user || !caseData || !interviewId) {
+  if (!caseData || !interviewId) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-white">
         <div className="h-3 w-3 rounded-full bg-[#2196F3] animate-pulse" />
@@ -101,5 +107,8 @@ export default function InterviewPage({ params }: { params: Promise<{ id: string
   // Feature flag: use V2 if enabled, otherwise V1 (default)
   const InterviewComponent = isV2Enabled() ? VoiceSessionV2 : VoiceInterviewClient
 
-  return <InterviewComponent caseData={caseData} interviewId={interviewId} userId={user.id} />
+  // For demo users, use a temporary demo user ID
+  const effectiveUserId = user?.id || 'demo-user'
+
+  return <InterviewComponent caseData={caseData} interviewId={interviewId} userId={effectiveUserId} />
 }

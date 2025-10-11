@@ -7,7 +7,11 @@ export async function POST(req: Request) {
     const { messages, caseContext, interviewId } = await req.json()
 
     const isAuthenticated = await isEchoAuthenticated()
-    if (!isAuthenticated) {
+
+    // Allow demo users (with demo interview IDs) to proceed without auth
+    const isDemoInterview = interviewId?.startsWith('demo-')
+
+    if (!isAuthenticated && !isDemoInterview) {
       return Response.json({ error: "Unauthorized" }, { status: 401 })
     }
 
