@@ -1,9 +1,13 @@
-import { getMockSession } from "@/lib/auth/mock-auth"
 import type { NextRequest } from "next/server"
 import { NextResponse } from "next/server"
 
 export async function middleware(request: NextRequest) {
-  const isAuthenticated = await getMockSession()
+  // Check for Echo session token in cookies
+  const echoToken = request.cookies.get("echo-token")?.value ||
+                    request.cookies.get("echo_token")?.value ||
+                    request.cookies.get("echo-session")?.value
+
+  const isAuthenticated = !!echoToken
   const isAuthPage = request.nextUrl.pathname.startsWith("/auth")
   const isDashboardOrInterview =
     request.nextUrl.pathname.startsWith("/dashboard") || request.nextUrl.pathname.startsWith("/interview")

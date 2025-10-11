@@ -7,34 +7,19 @@ import { PerformanceRadarChart } from "@/components/performance-radar-chart"
 import { TrendChart } from "@/components/trend-chart"
 import Link from "next/link"
 import { CheckCircle2, AlertCircle, TrendingUp, Clock } from "lucide-react"
-import { getMockSession, getMockUser } from "@/lib/auth/mock-auth"
+import { isEchoAuthenticated, getEchoUserId } from "@/lib/auth/echo-auth"
 
 export default async function FeedbackPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
 
-  const isAuthenticated = await getMockSession()
+  const isAuthenticated = await isEchoAuthenticated()
   if (!isAuthenticated) {
     redirect("/auth/login")
   }
 
-  const mockUser = getMockUser()
-
-  const isDemoInterview = id.startsWith("demo-")
-
-  if (isDemoInterview) {
-    // Generate mock feedback for demo interviews
-    const mockFeedback = generateMockFeedback()
-    const mockInterview = {
-      id,
-      cases: {
-        title: "Market Entry Strategy",
-        industry: "Technology",
-        difficulty: "Medium",
-      },
-      duration: 1200, // 20 minutes
-    }
-
-    return renderFeedbackPage(mockInterview, mockFeedback, [])
+  const userId = await getEchoUserId()
+  if (!userId) {
+    redirect("/auth/login")
   }
 
   // For real interviews, use database
@@ -46,7 +31,7 @@ export default async function FeedbackPage({ params }: { params: Promise<{ id: s
     .eq("id", id)
     .maybeSingle()
 
-  if (!interview || interview.user_id !== mockUser.id) {
+  if (!interview || interview.user_id !== userId) {
     redirect("/dashboard")
   }
 
@@ -60,7 +45,7 @@ export default async function FeedbackPage({ params }: { params: Promise<{ id: s
   const { data: allInterviews } = await supabase
     .from("interviews")
     .select("*, feedback(*)")
-    .eq("user_id", mockUser.id)
+    .eq("user_id", userId)
     .eq("status", "completed")
     .order("completed_at", { ascending: true })
 
