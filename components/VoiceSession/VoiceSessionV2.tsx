@@ -202,14 +202,33 @@ export function VoiceSessionV2({ caseData, interviewId, userId }: VoiceSessionPr
     }
   }, [caseStage])
 
-  const speakWelcome = () => {
-    const welcomeMessage: TranscriptMessage = {
-      role: 'assistant',
-      content: caseData.prompt,
-      timestamp: new Date(),
+  const speakWelcome = async () => {
+    // Get case introduction from AI (first message)
+    try {
+      const res = await fetch('/api/interview/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages: [], // Empty messages - this is the first interaction
+          caseContext: caseData,
+          interviewId,
+        }),
+      })
+
+      const data = await res.json()
+
+      if (data.message) {
+        const welcomeMessage: TranscriptMessage = {
+          role: 'assistant',
+          content: data.message,
+          timestamp: new Date(),
+        }
+        setMessages([welcomeMessage])
+        speakText(data.message)
+      }
+    } catch (error) {
+      console.error('[VoiceSessionV2] Failed to get welcome message:', error)
     }
-    setMessages([welcomeMessage])
-    speakText(caseData.prompt)
   }
 
   const animateTextSync = (text: string, durationMs: number) => {
