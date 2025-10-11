@@ -13,7 +13,7 @@ export default function HomePage() {
       if (isLoggedIn) {
         router.push('/dashboard')
       } else {
-        router.push('/auth')
+        router.push('/auth/login')
       }
     }
   }, [isLoggedIn, isLoading, router])
