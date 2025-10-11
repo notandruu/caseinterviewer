@@ -1,12 +1,6 @@
-import { createOpenAI } from "@ai-sdk/openai"
+import { openai } from "@ai-sdk/openai"
 import { generateText } from "ai"
 import { createClient } from "@/lib/supabase/server"
-
-// Echo-wrapped OpenAI client with automatic billing
-const echoOpenAI = createOpenAI({
-  apiKey: process.env.ECHO_API_KEY || '',
-  baseURL: 'https://api.meritsystems.io/v1/openai',
-})
 
 export async function POST(req: Request) {
   try {
@@ -79,7 +73,7 @@ Note: Map dimensions as follows for database compatibility:
       .join("\n\n")
 
     const { text } = await generateText({
-      model: echoOpenAI("gpt-4o"),
+      model: openai("gpt-4o"),
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: `Transcript:\n\n${conversationText}` },
