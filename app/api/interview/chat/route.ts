@@ -1,6 +1,12 @@
-import { openai } from "@ai-sdk/openai"
+import { createOpenAI } from "@ai-sdk/openai"
 import { generateText } from "ai"
 import { getMockSession } from "@/lib/auth/mock-auth"
+
+// Echo-wrapped OpenAI client with automatic billing
+const echoOpenAI = createOpenAI({
+  apiKey: process.env.ECHO_API_KEY || '',
+  baseURL: 'https://api.meritsystems.io/v1/openai',
+})
 
 export async function POST(req: Request) {
   try {
@@ -62,7 +68,7 @@ Critical Rules:
 Remember: Real MBB interviews are FAST. Test their ability to think on their feet under pressure.`
 
     const { text } = await generateText({
-      model: openai("gpt-4o"),
+      model: echoOpenAI("gpt-4o"),
       messages: [
         { role: "system", content: systemPrompt },
         ...messages.map((m: any) => ({
