@@ -13,46 +13,68 @@ export async function POST(req: Request) {
 
     // Count only user messages to track interview progress
     const userMessageCount = messages.filter((m: any) => m.role === 'user').length
-    let sectionInstruction = ''
 
-    if (userMessageCount === 0) {
-      // First message - case introduction
-      sectionInstruction = 'This is the FIRST message. Find section "1. Case Introduction" in the script below. Speak ONLY the text in quotes after "(Spoken)" - word for word. Do not add section numbers or any other text.'
-    } else if (userMessageCount === 1) {
-      // After first user response - structuring
-      sectionInstruction = 'The candidate gave their first response. Find section "2. Structuring Prompt" in the script. Speak ONLY the text in quotes after "(Spoken)" - exactly as written. Then STOP.'
-    } else if (userMessageCount === 2) {
-      // First quant question
-      sectionInstruction = 'The candidate structured their approach. Find section "3. Quantitative Analysis" in the script. Speak ONLY the text in quotes after "(Spoken)" - exactly as written.'
-    } else if (userMessageCount === 3) {
-      // Second quant question
-      sectionInstruction = 'The candidate answered the first quant. Find section "4. Quant Question – Updated Info" in the script. Speak ONLY the text in quotes after "(Spoken)" - exactly as written.'
-    } else if (userMessageCount === 4) {
-      // Creative thinking
-      sectionInstruction = 'The candidate answered the second quant. Find section "5. Creative Thinking" in the script. Speak ONLY the text in quotes after "(Spoken)" - exactly as written.'
-    } else if (userMessageCount === 5) {
-      // Recommendation
-      sectionInstruction = 'The candidate brainstormed ideas. Find section "6. Recommendation Prompt" in the script. Speak ONLY the text in quotes after "(Spoken)" - exactly as written.'
+    // Get section order from case (defaults to standard flow if not specified)
+    const sectionOrder = caseContext.section_order || [
+      'introduction',
+      'clarifying',
+      'structuring',
+      'quant_1',
+      'quant_2',
+      'creative',
+      'recommendation'
+    ]
+
+    // Map user message count to section
+    let currentSection = ''
+    let sectionContent = ''
+
+    if (userMessageCount < sectionOrder.length) {
+      currentSection = sectionOrder[userMessageCount]
+      const sectionKey = `section_${currentSection}`
+      sectionContent = caseContext[sectionKey] || ''
     } else {
-      // Feedback (user message 6+)
-      sectionInstruction = 'The candidate gave their recommendation. Find section "7. Interviewer Feedback" in the script. Speak ONLY the text in quotes after "(Spoken)" - exactly as written. This is the final message.'
+      // Feedback section (after all main sections)
+      currentSection = 'feedback'
+      sectionContent = caseContext.section_feedback_template || 'Thank you for completing the interview. You did a great job!'
     }
 
-    const systemPrompt = `You are a professional case interviewer. Your ONLY job is to read from the interview script below, one section at a time.
+    // Build dynamic instruction based on current section
+    let sectionInstruction = ''
+    const sectionNames: Record<string, string> = {
+      introduction: 'case introduction',
+      clarifying: 'clarifying questions',
+      structuring: 'structuring prompt',
+      quant_1: 'first quantitative question',
+      quant_2: 'second quantitative question',
+      creative: 'creative/brainstorming prompt',
+      recommendation: 'final recommendation prompt',
+      feedback: 'feedback'
+    }
+
+    const sectionName = sectionNames[currentSection] || currentSection
+    sectionInstruction = `You are now at the "${sectionName}" stage of the interview. Speak the following text EXACTLY as written:\n\n${sectionContent}\n\nDo NOT add any commentary, explanations, or follow-up questions beyond what's written above.`
+
+    const systemPrompt = `You are a professional case interviewer conducting a ${caseContext.case_type} case interview.
+
+Case Context:
+- Client: ${caseContext.title}
+- Industry: ${caseContext.industry}
+- Difficulty: ${caseContext.difficulty}
+
+Current Stage: ${sectionName} (user message #${userMessageCount})
 
 ${sectionInstruction}
 
 CRITICAL RULES:
-1. Find the correct numbered section in the script
-2. Speak ONLY the text that appears in quotes after "(Spoken)"
-3. Do NOT add: section numbers, headers, or any extra commentary
-4. Do NOT ask follow-up questions unless they're in the script
-5. Do NOT wait for more information - just read the script section and stop
-6. Output PLAIN TEXT ONLY - no markdown, no asterisks, no formatting
-7. After reading the script section, you are DONE - do not add anything else
+1. Speak ONLY the provided text for this section - nothing more, nothing less
+2. Do NOT add: section numbers, headers, transitions, or any extra commentary
+3. Do NOT ask follow-up questions unless they're in the provided text
+4. Output PLAIN TEXT ONLY - no markdown, no asterisks, no formatting
+5. After speaking the section text, you are DONE - do not add anything else
+6. If the text is empty or missing, politely acknowledge the candidate's response and wait for them to continue
 
-INTERVIEW SCRIPT:
-${caseContext.prompt}`
+The candidate is performing well. Your job is simply to guide them through the interview by reading each section.`
 
     const { text } = await generateText({
       model: openai("gpt-4o"),
