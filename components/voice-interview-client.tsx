@@ -236,14 +236,32 @@ export function VoiceInterviewClient({ caseData, interviewId, userId }: VoiceInt
     synthRef.current.speak(u);
   };
 
-  const startInterview = () => {
+  const startInterview = async () => {
     setHasStarted(true);
-    const welcome: ChatMessage = { role: "assistant", content: caseData.prompt, timestamp: new Date() };
-    setMessages([welcome]);
-    setCurrentAIText(caseData.prompt);
-    speakText(caseData.prompt);
     startTimeRef.current = new Date();
-    // Start listening immediately
+
+    // Get the first message from API (section 1: introduction)
+    try {
+      const res = await fetch("/api/interview/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          messages: [], // Empty - signals start of interview
+          caseContext: caseData,
+          interviewId,
+        }),
+      });
+
+      const data = await res.json();
+      const aiMessage: ChatMessage = { role: "assistant", content: data.message, timestamp: new Date() };
+      setMessages([aiMessage]);
+      setCurrentAIText(data.message);
+      await speakText(data.message);
+    } catch (e) {
+      console.error("[CaserAI] Error starting interview:", e);
+    }
+
+    // Start listening after AI speaks
     setTimeout(() => {
       recognitionRef.current?.start?.();
       setIsListening(true);
