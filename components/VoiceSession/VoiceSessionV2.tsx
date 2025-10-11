@@ -217,7 +217,12 @@ export function VoiceSessionV2({ caseData, interviewId, userId }: VoiceSessionPr
 
       const data = await res.json()
 
+      console.log('[VoiceSessionV2] Welcome message response:', data)
+
       if (data.message) {
+        console.log('[VoiceSessionV2] Message content:', data.message)
+        console.log('[VoiceSessionV2] Message length:', data.message.length)
+
         const welcomeMessage: TranscriptMessage = {
           role: 'assistant',
           content: data.message,
@@ -228,6 +233,8 @@ export function VoiceSessionV2({ caseData, interviewId, userId }: VoiceSessionPr
         // Update state machine to agent_speaking
         dispatch({ type: 'LLM_RESPONSE_READY', payload: data.message })
         speakText(data.message)
+      } else {
+        console.log('[VoiceSessionV2] No message in response!')
       }
     } catch (error) {
       console.error('[VoiceSessionV2] Failed to get welcome message:', error)
