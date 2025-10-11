@@ -17,36 +17,41 @@ export async function POST(req: Request) {
 
     if (userMessageCount === 0) {
       // First message - case introduction
-      sectionInstruction = 'This is the FIRST message. Find "1. Case Introduction" in the script below and speak ONLY that section word-for-word. Do not add anything else.'
+      sectionInstruction = 'This is the FIRST message. Find section "1. Case Introduction" in the script below. Speak ONLY the text in quotes after "(Spoken)" - word for word. Do not add section numbers or any other text.'
     } else if (userMessageCount === 1) {
       // After first user response - structuring
-      sectionInstruction = 'The candidate gave their first response. Now move to "2. Structuring Prompt" in the script. Read it EXACTLY as written to ask them to structure their approach. Do NOT wait for more info - immediately present the structuring prompt.'
-    } else if (userMessageCount >= 2 && userMessageCount <= 4) {
-      // Mid interview - deeper exploration (user messages 2-4)
-      sectionInstruction = 'The candidate responded to structuring. Now move to "3. Deeper Exploration" in the script. Present the next question from this section (Quant 1, Quant 2, or Brainstorm). If you already asked a question from this section, ask the NEXT one. Keep moving through the questions - do not wait.'
-    } else if (userMessageCount >= 5 && userMessageCount <= 6) {
-      // Late interview - recommendation (user messages 5-6)
-      sectionInstruction = 'The candidate responded. Now move to "4. Recommendation Prompt" in the script. Ask them to synthesize everything and provide their final recommendation. Read the prompt EXACTLY as written.'
+      sectionInstruction = 'The candidate gave their first response. Find section "2. Structuring Prompt" in the script. Speak ONLY the text in quotes after "(Spoken)" - exactly as written. Then STOP.'
+    } else if (userMessageCount === 2) {
+      // First quant question
+      sectionInstruction = 'The candidate structured their approach. Find section "3. Quantitative Analysis" in the script. Speak ONLY the text in quotes after "(Spoken)" - exactly as written.'
+    } else if (userMessageCount === 3) {
+      // Second quant question
+      sectionInstruction = 'The candidate answered the first quant. Find section "4. Quant Question – Updated Info" in the script. Speak ONLY the text in quotes after "(Spoken)" - exactly as written.'
+    } else if (userMessageCount === 4) {
+      // Creative thinking
+      sectionInstruction = 'The candidate answered the second quant. Find section "5. Creative Thinking" in the script. Speak ONLY the text in quotes after "(Spoken)" - exactly as written.'
+    } else if (userMessageCount === 5) {
+      // Recommendation
+      sectionInstruction = 'The candidate brainstormed ideas. Find section "6. Recommendation Prompt" in the script. Speak ONLY the text in quotes after "(Spoken)" - exactly as written.'
     } else {
-      // End - feedback (user message 7+)
-      sectionInstruction = 'Final stage. Find "5. Interviewer Feedback" in the script and provide your closing feedback based on their performance. Keep it concise and specific.'
+      // Feedback (user message 6+)
+      sectionInstruction = 'The candidate gave their recommendation. Find section "7. Interviewer Feedback" in the script. Speak ONLY the text in quotes after "(Spoken)" - exactly as written. This is the final message.'
     }
 
-    const systemPrompt = `You are a case interviewer. Your job is to KEEP THE INTERVIEW MOVING by reading from the script below, section by section.
+    const systemPrompt = `You are a professional case interviewer. Your ONLY job is to read from the interview script below, one section at a time.
 
 ${sectionInstruction}
 
 CRITICAL RULES:
-- After the candidate responds, IMMEDIATELY move to the next section of the script
-- Do NOT ask "Is there anything else?" or wait for more information
-- Do NOT engage in back-and-forth discussion - keep progressing through the case
-- Speak the script content EXACTLY as written (it's already in spoken form)
-- Do NOT add section numbers or headers when speaking
-- Do NOT speak multiple sections at once
-- Keep it natural and conversational (but KEEP MOVING FORWARD)
-- Output PLAIN TEXT ONLY - no markdown, no special characters
+1. Find the correct numbered section in the script
+2. Speak ONLY the text that appears in quotes after "(Spoken)"
+3. Do NOT add: section numbers, headers, or any extra commentary
+4. Do NOT ask follow-up questions unless they're in the script
+5. Do NOT wait for more information - just read the script section and stop
+6. Output PLAIN TEXT ONLY - no markdown, no asterisks, no formatting
+7. After reading the script section, you are DONE - do not add anything else
 
-CASE SCRIPT:
+INTERVIEW SCRIPT:
 ${caseContext.prompt}`
 
     const { text } = await generateText({
