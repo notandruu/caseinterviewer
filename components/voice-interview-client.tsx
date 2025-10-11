@@ -145,7 +145,34 @@ export function VoiceInterviewClient({ caseData, interviewId, userId }: VoiceInt
           interviewId,
         }),
       });
+
       const data = await res.json();
+
+      // Handle insufficient balance error
+      if (res.status === 402 && data.requiresPayment) {
+        const errorMessage = "You've run out of credits. Please add funds to your account to continue this interview.";
+        const aiMessage: ChatMessage = { role: "assistant", content: errorMessage, timestamp: new Date() };
+        setMessages((prev) => [...prev, aiMessage]);
+        setCurrentAIText(errorMessage);
+        await speakText(errorMessage);
+
+        // Redirect to pricing page after 3 seconds
+        setTimeout(() => {
+          router.push('/pricing');
+        }, 3000);
+        return;
+      }
+
+      // Handle rate limit error
+      if (res.status === 429) {
+        const errorMessage = "Too many requests. Please wait a moment and try again.";
+        const aiMessage: ChatMessage = { role: "assistant", content: errorMessage, timestamp: new Date() };
+        setMessages((prev) => [...prev, aiMessage]);
+        setCurrentAIText(errorMessage);
+        await speakText(errorMessage);
+        return;
+      }
+
       const aiMessage: ChatMessage = { role: "assistant", content: data.message, timestamp: new Date() };
       setMessages((prev) => [...prev, aiMessage]);
       setCurrentAIText(data.message);
