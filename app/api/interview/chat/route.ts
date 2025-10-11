@@ -1,23 +1,13 @@
 import { generateText } from "ai"
-import { isEchoAuthenticated } from "@/lib/auth/echo-auth"
 import { createOpenAI } from "@ai-sdk/openai"
 
 export async function POST(req: Request) {
   try {
     const { messages, caseContext, interviewId } = await req.json()
 
-    const isAuthenticated = await isEchoAuthenticated()
-
-    // Allow demo users (with demo interview IDs) to proceed without auth
-    const isDemoInterview = interviewId?.startsWith('demo-')
-
-    if (!isAuthenticated && !isDemoInterview) {
-      return Response.json({ error: "Unauthorized" }, { status: 401 })
-    }
-
-    // Create OpenAI instance configured to use Echo SDK router
+    // Use OpenAI API directly for demo
+    // TODO: Switch to Echo SDK router for production usage metering
     const openai = createOpenAI({
-      baseURL: "https://echo.router.merit.systems/v1",
       apiKey: process.env.OPENAI_API_KEY,
     })
 
@@ -82,16 +72,7 @@ ${caseContext.prompt}`
 
     return Response.json({ message: cleanText })
   } catch (error: any) {
-    console.error("[v0] Error in chat route:", error)
-
-    // Handle Echo balance/quota errors
-    if (error?.status === 402 || error?.message?.includes('insufficient')) {
-      return Response.json({
-        error: "Insufficient balance",
-        message: "You don't have enough credits. Please add funds to continue.",
-        requiresPayment: true
-      }, { status: 402 })
-    }
+    console.error("[Interview Chat] Error:", error)
 
     if (error?.status === 429) {
       return Response.json({
@@ -100,6 +81,9 @@ ${caseContext.prompt}`
       }, { status: 429 })
     }
 
-    return Response.json({ error: "Internal server error" }, { status: 500 })
+    return Response.json({
+      error: "Internal server error",
+      message: error?.message || "An error occurred during the interview."
+    }, { status: 500 })
   }
 }
