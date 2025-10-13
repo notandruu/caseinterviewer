@@ -253,9 +253,7 @@ export default function OnboardingPage() {
                 <button
                   onClick={goNext}
                   disabled={!canContinue() || isLoading}
-                  className={`w-full h-14 text-base font-medium bg-black text-white hover:bg-black/90 disabled:bg-gray-400 disabled:cursor-not-allowed rounded-2xl transition-all duration-300 ${
-                    currentStep === "commitment" || currentStep === "allset" ? "border-2 border-blue-500" : ""
-                  } ${isLoading ? "opacity-75" : ""}`}
+                  className={`w-full h-14 text-base font-medium bg-black text-white hover:bg-black/90 disabled:bg-gray-400 disabled:cursor-not-allowed rounded-2xl transition-all duration-300 ${isLoading ? "opacity-75" : ""}`}
                 >
                   {isLoading ? (
                     <span className="flex items-center justify-center gap-2">
