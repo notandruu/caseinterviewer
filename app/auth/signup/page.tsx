@@ -19,7 +19,7 @@ export default function SignUpPage() {
   if (isLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-white">
-        <div className="h-3 w-3 rounded-full bg-[#F4C542] animate-pulse" />
+        <div className="h-3 w-3 rounded-full bg-[#2196F3] animate-pulse" />
       </div>
     )
   }
@@ -53,7 +53,7 @@ export default function SignUpPage() {
             console.error('Sign up error:', error)
           }}
         >
-          <button className="w-full px-6 py-4 bg-[#F4C542] hover:bg-[#E5B632] text-gray-900 font-medium rounded-2xl transition-colors shadow-sm">
+          <button className="w-full px-6 py-4 bg-[#2196F3] hover:bg-[#2196F3]/90 text-white font-medium rounded-2xl transition-colors shadow-sm">
             sign up
           </button>
         </EchoSignIn>
@@ -64,7 +64,7 @@ export default function SignUpPage() {
             already have an account?{' '}
             <button
               onClick={() => router.push('/auth/login')}
-              className="text-[#F4C542] hover:underline"
+              className="text-[#2196F3] hover:underline"
             >
               sign in
             </button>
