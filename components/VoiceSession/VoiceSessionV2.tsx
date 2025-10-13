@@ -113,6 +113,8 @@ export function VoiceSessionV2({ caseData, interviewId, userId }: VoiceSessionPr
   const energyIntervalRef = useRef<NodeJS.Timeout | null>(null)
   const isInitializingRef = useRef(false)
   const isInitializedRef = useRef(false)
+  const speechStartTimeRef = useRef<number | null>(null)
+  const MIN_SPEECH_DURATION_MS = 400  // Minimum duration to consider as actual speech
 
   const startTimeRef = useRef<Date>(new Date())
 
@@ -348,9 +350,9 @@ Begin by greeting the candidate warmly and then deliver the introduction from St
               voice: 'shimmer',
               turn_detection: {
                 type: 'server_vad',
-                threshold: 0.5,
-                prefix_padding_ms: 300,
-                silence_duration_ms: 500,
+                threshold: 0.7,  // Increased from 0.5 to reduce sensitivity to background noise
+                prefix_padding_ms: 500,  // Increased to capture more context before speech
+                silence_duration_ms: 1200,  // Increased from 500ms to avoid cutting off user mid-sentence
               },
             },
           }
@@ -495,11 +497,30 @@ Begin by greeting the candidate warmly and then deliver the introduction from St
 
               case 'input_audio_buffer.speech_started':
                 logEvent('user_speech_started')
+                speechStartTimeRef.current = Date.now()
                 dispatch({ type: 'USER_STARTED_SPEAKING' })
                 break
 
               case 'input_audio_buffer.speech_stopped':
-                logEvent('user_speech_stopped')
+                // Filter out very short audio bursts (likely background noise)
+                const speechDuration = speechStartTimeRef.current
+                  ? Date.now() - speechStartTimeRef.current
+                  : 0
+
+                logEvent('user_speech_stopped', { duration: speechDuration })
+
+                // If speech was too short, cancel the input to prevent agent from responding to noise
+                if (speechDuration < MIN_SPEECH_DURATION_MS) {
+                  logEvent('speech_too_short_filtered', { duration: speechDuration })
+                  // Cancel the current response by truncating the audio buffer
+                  if (dataChannelRef.current?.readyState === 'open') {
+                    dataChannelRef.current.send(JSON.stringify({
+                      type: 'input_audio_buffer.clear'
+                    }))
+                  }
+                }
+
+                speechStartTimeRef.current = null
                 break
 
               case 'response.created':
@@ -591,6 +612,7 @@ Begin by greeting the candidate warmly and then deliver the introduction from St
       // Reset initialization state
       isInitializingRef.current = false
       isInitializedRef.current = false
+      speechStartTimeRef.current = null
 
       if (dataChannelRef.current) {
         dataChannelRef.current.close()
@@ -686,59 +708,52 @@ Begin by greeting the candidate warmly and then deliver the introduction from St
 
   return (
     <div className="vs-screen">
-      {/* Interview Timeline */}
-      <InterviewTimeline currentStage={currentStage} />
+      {/* Interview Timeline - Hide on mobile/tablet */}
+      <div className="hidden md:block">
+        <InterviewTimeline currentStage={currentStage} />
+      </div>
 
       {/* Header */}
-      <div style={{ position: 'absolute', top: '2rem', left: '2rem' }}>
-        <h1 style={{ fontSize: '1.25rem', fontWeight: 600, color: '#3A3A3A' }}>
+      <div className="absolute top-4 left-4 md:top-8 md:left-8 max-w-[calc(100%-8rem)] md:max-w-none">
+        <h1 className="text-base md:text-xl font-semibold text-gray-800 truncate">
           {caseData.title}
         </h1>
-        <p style={{ fontSize: '0.875rem', color: '#555' }}>
+        <p className="text-xs md:text-sm text-gray-600 truncate">
           {caseData.industry} • {caseData.difficulty}
         </p>
       </div>
 
-      {/* Data Exhibits Slideover */}
-      <DataExhibitSlideover exhibits={sampleExhibits} />
+      {/* Data Exhibits Slideover - Hide on mobile */}
+      <div className="hidden md:block">
+        <DataExhibitSlideover exhibits={sampleExhibits} />
+      </div>
 
       {/* End Interview Button */}
-      <div style={{ position: 'absolute', top: '2rem', right: '2rem' }}>
+      <div className="absolute top-4 right-4 md:top-8 md:right-8">
         <button
           onClick={endInterview}
-          style={{
-            padding: '0.5rem 1rem',
-            backgroundColor: 'transparent',
-            border: '1px solid #555',
-            borderRadius: '0.5rem',
-            color: '#555',
-            cursor: 'pointer',
-            fontSize: '0.875rem',
-          }}
+          className="px-3 py-2 md:px-4 md:py-2.5 bg-transparent border border-gray-500 rounded-lg text-gray-600 hover:bg-gray-50 text-xs md:text-sm font-medium transition-colors"
         >
-          End Interview
+          End
         </button>
       </div>
 
       {/* Error Display */}
       {error && (
-        <div style={{
-          position: 'absolute',
-          top: '50%',
-          left: '50%',
-          transform: 'translate(-50%, -50%)',
-          backgroundColor: '#fee',
-          border: '1px solid #fcc',
-          borderRadius: '0.5rem',
-          padding: '1rem',
-          color: '#c00',
-        }}>
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-red-50 border border-red-200 rounded-lg p-4 text-red-700 max-w-[90%] md:max-w-md text-sm md:text-base">
           {error}
         </div>
       )}
 
+      {/* Mobile Stage Indicator - Show only on mobile */}
+      <div className="md:hidden absolute top-16 left-4 right-4 flex justify-center">
+        <div className="bg-white/80 backdrop-blur-sm px-3 py-1.5 rounded-full border border-gray-200">
+          <span className="text-xs font-medium text-gray-600 capitalize">{currentStage}</span>
+        </div>
+      </div>
+
       {/* Main content */}
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3rem' }}>
+      <div className="flex flex-col items-center gap-8 md:gap-12 w-full px-4">
         {/* Agent Orb with pop-in animation */}
         <div className="vs-orb-container">
           <AgentOrb mode={sessionState} energy={ttsEnergy} />
@@ -762,21 +777,12 @@ Begin by greeting the candidate warmly and then deliver the introduction from St
         </div>
 
         {/* Status Indicator */}
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '0.5rem',
-          fontSize: '0.875rem',
-          color: '#555',
-        }}>
-          <div style={{
-            width: '0.5rem',
-            height: '0.5rem',
-            borderRadius: '50%',
-            backgroundColor: isRecording ? '#4ade80' : '#9ca3af',
-            animation: isRecording ? 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite' : 'none',
-          }} />
-          <span>{isRecording ? 'Connected - Speak anytime' : 'Connecting...'}</span>
+        <div className="flex items-center gap-2 text-xs md:text-sm text-gray-600">
+          <div
+            className={`w-2 h-2 rounded-full ${isRecording ? 'bg-green-400 animate-pulse' : 'bg-gray-400'}`}
+          />
+          <span className="hidden sm:inline">{isRecording ? 'Connected - Speak anytime' : 'Connecting...'}</span>
+          <span className="sm:hidden">{isRecording ? 'Connected' : 'Connecting...'}</span>
         </div>
       </div>
     </div>
