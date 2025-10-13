@@ -144,30 +144,35 @@
   position: relative;
   width: 100%;
   max-width: 48rem;
+  height: 5.25rem; /* Fixed height for exactly 3 lines at 1.75 line-height */
   overflow: hidden;
   padding: 0 1rem;
   margin: 1.5rem 0;
+  display: flex;
+  align-items: flex-end; /* Align text to bottom so newest appears at bottom */
 }
 
+/* Strong fade on left side for old text */
 .vs-transcript-container::before {
   content: '';
   position: absolute;
   left: 0;
   top: 0;
   bottom: 0;
-  width: 8rem;
-  background: linear-gradient(to right, var(--vs-white), transparent);
+  width: 10rem; /* Wider fade area */
+  background: linear-gradient(to right, var(--vs-white) 0%, var(--vs-white) 20%, transparent 100%);
   pointer-events: none;
   z-index: 1;
 }
 
+/* Subtle fade on right side */
 .vs-transcript-container::after {
   content: '';
   position: absolute;
   right: 0;
   top: 0;
   bottom: 0;
-  width: 4rem;
+  width: 3rem;
   background: linear-gradient(to left, var(--vs-white), transparent);
   pointer-events: none;
   z-index: 1;
@@ -180,33 +185,17 @@
   text-align: center;
   white-space: normal;
   word-wrap: break-word;
-  overflow-y: auto; /* Allow scrolling for long text */
-  overflow-x: hidden;
-  min-height: 5.25rem; /* 3 lines at 1.75 line-height */
-  max-height: 10.5rem; /* 6 lines - double the height to show more content */
+  overflow: hidden; /* Hide overflow completely */
+  height: 100%;
+  width: 100%;
   padding: 0 2rem;
-  scroll-behavior: smooth; /* Smooth auto-scroll */
-  /* Removed -webkit-line-clamp to prevent ellipsis */
-  /* Text will scroll naturally when it exceeds max-height */
-}
-
-/* Custom scrollbar styling for transcript */
-.vs-transcript-line::-webkit-scrollbar {
-  width: 6px;
-}
-
-.vs-transcript-line::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.vs-transcript-line::-webkit-scrollbar-thumb {
-  background: var(--vs-grey-secondary);
-  border-radius: 3px;
-  opacity: 0.3;
-}
-
-.vs-transcript-line::-webkit-scrollbar-thumb:hover {
-  background: var(--vs-grey);
+  display: flex;
+  align-items: flex-end; /* Align to bottom */
+  justify-content: center;
+  /* Limit to exactly 3 lines with ellipsis for overflow */
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
 }
 
 .vs-caption {
@@ -291,12 +280,13 @@
 
   .vs-transcript-container {
     max-width: 100%;
+    height: 4.8rem; /* 3 lines at 1.6 line-height for mobile */
     padding: 0 0.5rem;
     margin: 1rem 0;
   }
 
   .vs-transcript-container::before {
-    width: 3rem;
+    width: 6rem; /* Adjusted fade width for mobile */
   }
 
   .vs-transcript-container::after {
@@ -307,8 +297,6 @@
     font-size: 0.9375rem;
     line-height: 1.6;
     padding: 0 0.75rem;
-    min-height: 4.8rem;
-    max-height: 9.6rem;
   }
 
   .vs-caption {
@@ -333,6 +321,10 @@
 
   .vs-orb-container {
     transform: scale(0.75);
+  }
+
+  .vs-transcript-container {
+    height: 4.5rem; /* 3 lines at 1.5 line-height for small mobile */
   }
 
   .vs-transcript-line {
