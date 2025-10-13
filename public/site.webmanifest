@@ -1,0 +1,21 @@
+{
+  "name": "Case Interviewer",
+  "short_name": "Case Interviewer",
+  "description": "Your sharp, structured AI built to challenge how you think, just like a real McKinsey interviewer would.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#2196F3",
+  "icons": [
+    {
+      "src": "/favicon.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/favicon.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

@@ -14,7 +14,9 @@
 @media (prefers-reduced-motion: reduce) {
   .vs-orb,
   .vs-mic-bar,
-  .vs-fade-in {
+  .vs-fade-in,
+  .vs-screen,
+  .vs-orb-container {
     animation: none !important;
     transition: opacity 0.2s ease-in-out !important;
   }
@@ -95,6 +97,31 @@
   animation: vs-fade-in 200ms ease-out;
 }
 
+/* Screen fade in animation */
+@keyframes vs-screen-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Agent orb pop-out animation */
+@keyframes vs-orb-pop-in {
+  0% {
+    opacity: 0;
+    transform: scale(0.3);
+  }
+  70% {
+    transform: scale(1.1);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
 /* Screen layout */
 .vs-screen {
   background-color: var(--vs-white);
@@ -104,6 +131,12 @@
   align-items: center;
   justify-content: center;
   padding: 2rem;
+  animation: vs-screen-fade-in 600ms ease-out;
+}
+
+/* Apply pop-in animation to orb on first load */
+.vs-orb-container {
+  animation: vs-orb-pop-in 800ms cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 /* Transcript container with horizontal fade */

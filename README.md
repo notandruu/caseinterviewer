@@ -20,7 +20,7 @@ A clean Next.js 15 starter with UI components, Supabase, and Echo SDK ready to g
 - **Echo SDK** - Authentication and billing
   - Provider configured in `app/layout.tsx`
   - Login page: `/auth/login`
-  - Signup page: `/auth/sign-up`
+  - Signup page: `/auth/signup`
   - Hook: `useEcho()` from `@merit-systems/echo-react-sdk`
 
 ### ✅ Configuration
