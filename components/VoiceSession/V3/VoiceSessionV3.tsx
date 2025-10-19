@@ -14,6 +14,7 @@ import { getMicStream, createAudioAnalyzer } from '@/lib/audio/analyzer'
 import { REALTIME_TOOL_DEFINITIONS, handleRealtimeTool } from '@/lib/tools'
 import { TimelineSidebar } from './TimelineSidebar'
 import { HintsCounter } from './HintsCounter'
+import { FrameworkTimer } from './FrameworkTimer'
 import type { ClientCase, SectionName, TranscriptEntry } from '@/types/cases'
 import '../../../styles/voice-session.css'
 
@@ -22,13 +23,14 @@ interface VoiceSessionV3Props {
   attemptId: string
   userId: string
   language?: string
+  showTranscription?: boolean
 }
 
 function logEvent(event: string, data?: Record<string, any>) {
   console.log(`[VoiceSessionV3] ${event}`, data || '')
 }
 
-export function VoiceSessionV3({ caseData, attemptId, userId, language = 'en' }: VoiceSessionV3Props) {
+export function VoiceSessionV3({ caseData, attemptId, userId, language = 'en', showTranscription: initialShowTranscription = true }: VoiceSessionV3Props) {
   const [sessionState, dispatch] = useReducer(reducer, INITIAL_STATE)
   const [messages, setMessages] = useState<TranscriptEntry[]>([])
   const [displayedText, setDisplayedText] = useState('')
@@ -39,6 +41,7 @@ export function VoiceSessionV3({ caseData, attemptId, userId, language = 'en' }:
   const [currentSection, setCurrentSection] = useState<SectionName>('introduction')
   const [hintsUsed, setHintsUsed] = useState(0)
   const [totalHints, setTotalHints] = useState(0)
+  const [showTranscription, setShowTranscription] = useState(initialShowTranscription)
 
   const router = useRouter()
 
@@ -263,6 +266,11 @@ STEP 3: Listen to their response and guide them through the case
    - DO score Framework, Analysis, and Synthesis sections before advancing
    - Call score_response with extracted numbers and bullet reasoning for scored sections
 6. **If interrupted while speaking**, stop, listen, briefly acknowledge, and continue.
+7. **Section Transitions:**
+   - After completing the Analysis section, score their response, then IMMEDIATELY advance and deliver the Synthesis prompt
+   - DO NOT ask "Would you like to explore any more ideas?" or similar questions
+   - Use a neutral transition (e.g., "Let's move to the final question" or "Thank you") and move directly to the synthesis question
+   - NO positive affirmations during transitions
 
 # Current Section Info
 **Section:** ${section.name}
@@ -270,9 +278,27 @@ STEP 3: Listen to their response and guide them through the case
 **Section Prompt:** ${section.prompt}
 
 # Personality & Tone
-Professional, challenging yet supportive, detail-oriented interviewer.
-Formal but friendly. Push for clarity and structured thinking.
-Keep responses concise (2-3 sentences max unless explaining complex data).
+You are a neutral, professional interviewer maintaining high standards.
+
+**Content Guidelines:**
+- **No positive affirmations**: Avoid "Good point," "Exactly," "Great," "Nice," "Well done," "Excellent thinking," etc.
+- **No validating language**: Do not praise or affirm the candidate's responses during the interview
+- **Neutral acknowledgments only**: Use "I see," "Understood," "Let's move on," or simply proceed to the next question
+- **Exception**: You may use neutral transitions like "Thank you" or "Let's continue" when advancing sections
+- **Professional distance**: Maintain the tone of a rigorous, competent interviewer who is evaluating, not coaching
+- **Concise responses**: Keep responses to 2-3 sentences max unless explaining complex data
+- **Push for clarity**: Ask follow-up questions if reasoning is unclear, but without praise
+
+**Voice & Delivery (Critical for Natural Speech):**
+- **Sound human and conversational**: Speak like a real person, not a robot reading a script
+- **Use natural pacing**: Vary your speed — slow down for important points, speed up slightly for transitions
+- **Add subtle vocal variety**: Use slight pitch changes to emphasize key words and maintain engagement
+- **Natural pauses**: Include brief, natural pauses between thoughts (not robotic uniform spacing)
+- **Conversational inflections**: Use upward inflections for questions, downward for statements
+- **Section transitions**: Add warmth during transitions — let your voice signal "we're moving forward together"
+- **Thinking sounds**: Occasional natural sounds like "Mm," "Alright," or brief pauses before responding add realism
+- **Emotional authenticity**: Sound like you're genuinely listening and thinking, not just executing a script
+- **Avoid monotone**: Each sentence should have natural rhythm and flow, like a real conversation
 
 # Tools Available
 - **get_case_section**: Fetch case data and section details (CALL THIS FIRST!)
@@ -280,7 +306,7 @@ Keep responses concise (2-3 sentences max unless explaining complex data).
 - **calc_basic**: Arithmetic calculator (REQUIRED for all math)
 - **score_response**: Score current section before advancing
 - **advance_section**: Move to next section (only after scoring)`,
-              voice: 'shimmer', // Professional female voice
+              voice: 'verse', // Expressive, natural, warm voice for human-like engagement
               turn_detection: {
                 type: 'server_vad',
                 threshold: 0.5,
@@ -667,24 +693,45 @@ Keep responses concise (2-3 sentences max unless explaining complex data).
         </p>
       </div>
 
+      {/* Framework Timer - Only for Hard (4) and Expert (5) difficulty */}
+      <FrameworkTimer
+        isActive={currentSection === 'framework'}
+        difficultyLevel={caseData.difficulty_level}
+      />
+
       {/* Hints Counter */}
       <HintsCounter used={hintsUsed} total={totalHints} />
 
-      {/* End Interview Button */}
-      <div style={{ position: 'absolute', top: '2rem', right: '2rem' }}>
+      {/* Controls - Top Right - Hidden on small mobile to avoid overlap */}
+      <div className="hidden sm:flex absolute top-4 md:top-8 left-4 md:left-auto md:right-8 gap-2 items-center z-[999]">
+        {/* Transcription Toggle */}
+        <button
+          onClick={() => {
+            const newValue = !showTranscription
+            setShowTranscription(newValue)
+            if (typeof window !== 'undefined') {
+              localStorage.setItem('interview_show_transcription', String(newValue))
+            }
+          }}
+          className="flex items-center gap-1.5 px-3 py-2 rounded-lg border text-xs md:text-sm cursor-pointer transition-colors"
+          style={{
+            backgroundColor: showTranscription ? 'transparent' : '#FEF3C7',
+            borderColor: showTranscription ? '#555' : '#F59E0B',
+            color: showTranscription ? '#555' : '#92400E',
+          }}
+          title={showTranscription ? 'Hide transcription (Verbal-only mode)' : 'Show transcription'}
+        >
+          <span className="text-sm">{showTranscription ? '👁️' : '🎧'}</span>
+          <span className="hidden md:inline">{showTranscription ? 'Text' : 'Audio Only'}</span>
+        </button>
+
+        {/* End Interview Button */}
         <button
           onClick={endInterview}
-          style={{
-            padding: '0.5rem 1rem',
-            backgroundColor: 'transparent',
-            border: '1px solid #555',
-            borderRadius: '0.5rem',
-            color: '#555',
-            cursor: 'pointer',
-            fontSize: '0.875rem',
-          }}
+          className="px-3 py-2 bg-transparent border border-gray-600 rounded-lg text-gray-600 cursor-pointer text-xs md:text-sm hover:bg-gray-50 transition-colors"
         >
-          End Interview
+          <span className="hidden md:inline">End Interview</span>
+          <span className="md:hidden">End</span>
         </button>
       </div>
 
@@ -738,7 +785,7 @@ Keep responses concise (2-3 sentences max unless explaining complex data).
             maskImage: 'linear-gradient(to bottom, transparent 0%, black 25%, black 100%)',
             paddingTop: '2rem',
           }}>
-            {displayedText}
+            {showTranscription ? displayedText : (displayedText ? '🎧 Listening mode active' : '')}
           </div>
         </div>
 

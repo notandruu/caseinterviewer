@@ -1,4 +1,4 @@
-import type { Metadata } from 'next'
+import type { Metadata, Viewport } from 'next'
 import { GeistSans } from 'geist/font/sans'
 import { GeistMono } from 'geist/font/mono'
 import { Analytics } from '@vercel/analytics/next'
@@ -24,7 +24,6 @@ export const metadata: Metadata = {
   creator: 'Case Interviewer Inc',
   publisher: 'Case Interviewer Inc',
   metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || 'https://caseinterviewer.com'),
-  themeColor: '#ffffff',
   alternates: {
     canonical: '/',
   },
@@ -73,6 +72,10 @@ export const metadata: Metadata = {
     shortcut: '/favicon.png',
   },
   manifest: '/site.webmanifest',
+}
+
+export const viewport: Viewport = {
+  themeColor: '#ffffff',
 }
 
 export default function RootLayout({

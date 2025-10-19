@@ -164,6 +164,7 @@ export default function VoiceInterviewPage({
       attemptId={attemptId}
       userId={effectiveUserId}
       language={interviewSettings?.language || 'en'}
+      showTranscription={interviewSettings?.showTranscription ?? true}
     />
   )
 }

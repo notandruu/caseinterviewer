@@ -24,6 +24,7 @@ export interface Case {
   constraints: Record<string, any> | null
   sections: CaseSection[]
   evaluation_rubric: EvaluationRubric | null
+  analysis_chart: AnalysisChart | null // Chart displayed during analysis section
   created_by: string | null
   created_at: string
   updated_at: string
@@ -37,6 +38,74 @@ export interface Case {
  */
 export interface ClientCase extends Omit<Case, 'expected_answer_summary' | 'ground_truth'> {
   // These fields are stripped for non-staff users
+}
+
+// ============================================================================
+// Chart Types (for Analysis Section)
+// ============================================================================
+
+/**
+ * Chart data displayed during the analysis section
+ */
+export type AnalysisChart =
+  | ChartConfig
+  | ImageChart
+  | StorageChart
+  | MultiChart
+  | null
+
+/**
+ * Chart configuration for dynamic rendering (Recharts, Chart.js, etc.)
+ */
+export interface ChartConfig {
+  type: 'chart'
+  library: 'recharts' | 'chartjs' | 'plotly'
+  chartType: 'bar' | 'line' | 'pie' | 'area' | 'scatter'
+  title: string
+  description?: string
+  config: {
+    data: any[]
+    xAxis?: any
+    yAxis?: any
+    bars?: any[]
+    lines?: any[]
+    areas?: any[]
+    tooltip?: any
+    legend?: any
+    colors?: string[]
+    [key: string]: any
+  }
+}
+
+/**
+ * Static image chart (URL to image)
+ */
+export interface ImageChart {
+  type: 'image'
+  url: string
+  alt: string
+  width?: number
+  height?: number
+}
+
+/**
+ * Chart stored in Supabase Storage
+ */
+export interface StorageChart {
+  type: 'storage'
+  bucket: string
+  path: string
+  alt: string
+  width?: number
+  height?: number
+}
+
+/**
+ * Multiple charts displayed together
+ */
+export interface MultiChart {
+  type: 'multi'
+  charts: (ChartConfig | ImageChart | StorageChart)[]
 }
 
 // ============================================================================
