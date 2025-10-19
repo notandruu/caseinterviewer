@@ -18,6 +18,7 @@ import {
   AlertCircle
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
+import { DashboardLayout } from '@/components/DashboardLayout'
 
 interface CaseAttemptDetail {
   id: string
@@ -187,37 +188,38 @@ export default function CaseHistoryDetailPage({ params }: { params: Promise<{ id
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <div className="bg-white border-b border-gray-200">
-        <div className="max-w-5xl mx-auto px-4 md:px-8 py-4 md:py-6">
-          <button
-            onClick={() => router.push('/dashboard/history')}
-            className="flex items-center gap-2 text-gray-600 hover:text-gray-900 mb-4 transition-colors"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            <span className="text-sm font-medium">Back to History</span>
-          </button>
-
-          <div className="flex flex-col sm:flex-row items-start sm:justify-between gap-4">
-            <div className="flex-1">
-              <h1 className="text-2xl md:text-3xl font-bold text-gray-900 mb-2">{attempt.case.title}</h1>
-              <p className="text-sm md:text-base text-gray-600">
-                {attempt.case.firm && `${attempt.case.firm} • `}
-                {attempt.case.industry} • Level {attempt.case.difficulty_level}/5
-              </p>
-            </div>
-
+    <DashboardLayout>
+      <div className="min-h-screen bg-gray-50">
+        {/* Header */}
+        <div className="bg-white border-b border-gray-200">
+          <div className="max-w-5xl mx-auto px-4 md:px-8 py-4 md:py-6 mt-16 md:mt-0">
             <button
-              onClick={handleReplay}
-              className="flex items-center gap-2 px-4 md:px-6 py-2 md:py-3 bg-[#2196F3] text-white rounded-lg hover:bg-[#1976D2] transition-colors whitespace-nowrap"
+              onClick={() => router.push('/dashboard/history')}
+              className="flex items-center gap-2 text-gray-600 hover:text-gray-900 mb-4 transition-colors"
             >
-              <PlayCircle className="h-4 w-4 md:h-5 md:w-5" />
-              <span className="text-sm md:text-base">Retry Case</span>
+              <ArrowLeft className="h-4 w-4" />
+              <span className="text-sm font-medium">Back to History</span>
             </button>
+
+            <div className="flex flex-col sm:flex-row items-start sm:justify-between gap-4">
+              <div className="flex-1">
+                <h1 className="text-2xl md:text-3xl font-bold text-gray-900 mb-2">{attempt.case.title}</h1>
+                <p className="text-sm md:text-base text-gray-600">
+                  {attempt.case.firm && `${attempt.case.firm} • `}
+                  {attempt.case.industry} • Level {attempt.case.difficulty_level}/5
+                </p>
+              </div>
+
+              <button
+                onClick={handleReplay}
+                className="flex items-center gap-2 px-4 md:px-6 py-2 md:py-3 bg-[#2196F3] text-white rounded-lg hover:bg-[#1976D2] transition-colors whitespace-nowrap"
+              >
+                <PlayCircle className="h-4 w-4 md:h-5 md:w-5" />
+                <span className="text-sm md:text-base">Retry Case</span>
+              </button>
+            </div>
           </div>
         </div>
-      </div>
 
       {/* Tabs */}
       <div className="bg-white border-b border-gray-200">
@@ -521,6 +523,7 @@ export default function CaseHistoryDetailPage({ params }: { params: Promise<{ id
           </div>
         )}
       </div>
-    </div>
+      </div>
+    </DashboardLayout>
   )
 }
