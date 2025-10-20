@@ -151,11 +151,40 @@ export type CaseData = Record<string, any>
 
 /**
  * Ground truth for scoring
- * Contains expected calculations and framework components
+ * Contains expected calculations, framework components, and model answers
  */
 export interface GroundTruth {
   calculations?: Record<string, number>
   framework_components?: string[]
+
+  // Model answers for each section (used for AI feedback generation)
+  model_answers?: {
+    framework?: {
+      description: string
+      key_elements: string[]
+      sample_structure: string
+    }
+    analysis?: {
+      description: string
+      key_insights: string[]
+      quantitative_approach: string
+      sample_reasoning: string
+    }
+    synthesis?: {
+      description: string
+      recommended_structure: string
+      key_points: string[]
+      sample_recommendation: string
+    }
+  }
+
+  // Common mistakes to watch for (helps AI generate better feedback)
+  common_mistakes?: {
+    framework?: string[]
+    analysis?: string[]
+    synthesis?: string[]
+  }
+
   [key: string]: any
 }
 
