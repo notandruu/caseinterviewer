@@ -39,13 +39,21 @@ export default function DashboardPage() {
 
   useEffect(() => {
     async function checkOnboarding() {
-      if (!user?.id) return
+      console.log('[Dashboard] checkOnboarding called', { userId: user?.id, isLoggedIn })
 
-      const { data: profile } = await supabase
+      if (!user?.id) {
+        console.log('[Dashboard] No user ID, setting checkingOnboarding to false')
+        setCheckingOnboarding(false)
+        return
+      }
+
+      const { data: profile, error: profileError } = await supabase
         .from('user_profiles')
         .select('onboarding_completed, name')
         .eq('user_id', user.id)
         .single()
+
+      console.log('[Dashboard] Profile check result:', { profile, profileError })
 
       if (!profile?.onboarding_completed) {
         router.push('/onboarding')
@@ -57,18 +65,23 @@ export default function DashboardPage() {
     }
 
     async function fetchCases() {
+      console.log('[Dashboard] Fetching cases...')
       const casesResult = await supabase
         .from("cases")
         .select("*")
         .order("difficulty_level", { ascending: true })
+      console.log('[Dashboard] Cases fetched:', casesResult.data?.length || 0)
       setCases(casesResult.data || [])
     }
 
     if (isLoggedIn) {
       checkOnboarding()
       fetchCases()
+    } else {
+      console.log('[Dashboard] Not logged in, setting checkingOnboarding to false')
+      setCheckingOnboarding(false)
     }
-  }, [isLoggedIn, user, router])
+  }, [isLoggedIn, user, router, supabase])
 
   const handleStartCase = (caseId: string) => {
     router.push(`/interview/${caseId}`)
@@ -105,8 +118,8 @@ export default function DashboardPage() {
     router.push('/')
   }
 
-  // Show loading state while checking onboarding or fetching data
-  if (checkingOnboarding || cases.length === 0) {
+  // Show loading state while checking onboarding
+  if (checkingOnboarding) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-white">
         <div className="h-3 w-3 rounded-full bg-[#2196F3] animate-pulse" />

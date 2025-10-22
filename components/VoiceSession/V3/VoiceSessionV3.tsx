@@ -11,7 +11,8 @@ import { AgentOrb } from '../AgentOrb'
 import { MicVisualizer } from '../MicVisualizer'
 import { reducer, INITIAL_STATE } from '../state'
 import { getMicStream, createAudioAnalyzer } from '@/lib/audio/analyzer'
-import { REALTIME_TOOL_DEFINITIONS, handleRealtimeTool } from '@/lib/tools'
+import { COMPACT_TOOL_DEFINITIONS, handleCompactTool } from '@/lib/tools-compact'
+import { generateCompactSystemPrompt } from '@/lib/prompts/system-prompt-compact'
 import { TimelineSidebar } from './TimelineSidebar'
 import { HintsCounter } from './HintsCounter'
 import { FrameworkTimer } from './FrameworkTimer'
@@ -38,7 +39,10 @@ export function VoiceSessionV3({ caseData, attemptId, userId, language = 'en', s
   const [isRecording, setIsRecording] = useState(false)
   const [ttsEnergy, setTtsEnergy] = useState(0.5)
   const [error, setError] = useState<string | null>(null)
-  const [currentSection, setCurrentSection] = useState<SectionName>('introduction')
+  const [currentSection, setCurrentSection] = useState<string>('opening')
+  const [currentLineId, setCurrentLineId] = useState<string>('l_1')
+  const [caseCard, setCaseCard] = useState<any>(null)
+  const [lineCard, setLineCard] = useState<any>(null)
   const [hintsUsed, setHintsUsed] = useState(0)
   const [totalHints, setTotalHints] = useState(0)
   const [showTranscription, setShowTranscription] = useState(initialShowTranscription)
@@ -195,20 +199,26 @@ export function VoiceSessionV3({ caseData, attemptId, userId, language = 'en', s
         dc.addEventListener('open', async () => {
           logEvent('data_channel_opened')
 
-          // Get initial section details
-          const sectionResponse = await fetch('/api/voice-tools/get-case-section', {
+          // Get initial LineCard
+          const lineResponse = await fetch('/api/voice-tools-compact/get_next_line', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ caseId: caseData.id, attemptId }),
+            body: JSON.stringify({ attemptId }),
           })
 
-          if (!sectionResponse.ok) {
-            throw new Error('Failed to get section details')
+          if (!lineResponse.ok) {
+            throw new Error('Failed to get initial line')
           }
 
-          const sectionData = await sectionResponse.json()
-          const section = sectionData.section
-          setTotalHints(section.hints?.length || 0)
+          const lineData = await lineResponse.json()
+          setCaseCard(lineData.caseCard)
+          setLineCard(lineData.lineCard)
+          setCurrentSection(lineData.caseCard.section)
+          setCurrentLineId(lineData.caseCard.line_id)
+
+          // Count hints in current line
+          const hintsCount = lineData.lineCard.hints?.length || 0
+          setTotalHints(hintsCount)
 
           // Map language code to full name for instructions
           const languageMap: Record<string, string> = {
@@ -222,98 +232,31 @@ export function VoiceSessionV3({ caseData, attemptId, userId, language = 'en', s
           }
           const languageName = languageMap[language] || 'English'
 
+          // Generate compact system prompt with CaseCard and LineCard
+          const systemPrompt = lineData.caseCard && lineData.lineCard
+            ? generateCompactSystemPrompt(languageName, lineData.caseCard, lineData.lineCard)
+            : `# CRITICAL: LANGUAGE REQUIREMENT
+YOU MUST speak, respond, and conduct this ENTIRE interview ONLY in ${languageName}.
+Never switch to any other language. All your responses must be in ${languageName}.
+
+You are CaseInterviewer Voice (CIV), a structured, time-boxed interviewer.
+Waiting for case data... Call get_next_line(attemptId: "${attemptId}") to begin.`
+
           // Configure the session with tools - SINGLE SESSION UPDATE
           const sessionConfig = {
             type: 'session.update',
             session: {
               model: 'gpt-4o-realtime-preview-2024-12-17',
               modalities: ['text', 'audio'],
-              instructions: `# CRITICAL: LANGUAGE REQUIREMENT
-YOU MUST speak, respond, and conduct this ENTIRE interview ONLY in ${languageName}.
-Never switch to any other language. All your responses must be in ${languageName}.
-
-# Role & Identity
-You are an expert ${caseData.firm || 'consulting'} case interviewer conducting a realistic case interview in ${languageName}.
-
-**Case:** ${caseData.title}
-**Firm:** ${caseData.firm || 'Top Consulting Firm'}
-**Industry:** ${caseData.industry}
-**Difficulty Level:** ${caseData.difficulty_level}/5
-**Case ID:** ${caseData.id}
-**Attempt ID:** ${attemptId}
-
-# WORKFLOW - START HERE
-When the interview starts, follow these steps IN ORDER:
-
-STEP 1: Immediately call get_case_section(caseId: "${caseData.id}", attemptId: "${attemptId}")
-- This fetches essential case data you need (aircraft capacity, routes, prices, utilization, etc.)
-- Wait for the response
-
-STEP 2: After receiving the case data, immediately greet the candidate and begin:
-- Greet them warmly: "Welcome! I'm your interviewer today for the ${caseData.title} case."
-- Then deliver the section prompt you received from get_case_section
-- Ask if they're ready to begin
-
-STEP 3: Listen to their response and guide them through the case
-
-# Critical Constraints
-1. **Never reveal answers.** The expected_answer_summary is only for the server to grade. You must never access it or mention it.
-2. **Use calc_basic for ALL arithmetic.** You MUST NOT compute numbers in your head. Call calc_basic("expression") for every calculation.
-3. **Use hints only via reveal_hint.** Never give hints directly. If the candidate asks for help, call reveal_hint(attemptId).
-4. **Follow section order strictly:** Introduction → Framework → Analysis → Synthesis.
-5. **Scoring rules:**
-   - Do NOT score the Introduction section
-   - DO score Framework, Analysis, and Synthesis sections before advancing
-   - Call score_response with extracted numbers and bullet reasoning for scored sections
-6. **If interrupted while speaking**, stop, listen, briefly acknowledge, and continue.
-7. **Section Transitions:**
-   - After completing the Analysis section, score their response, then IMMEDIATELY advance and deliver the Synthesis prompt
-   - DO NOT ask "Would you like to explore any more ideas?" or similar questions
-   - Use a neutral transition (e.g., "Let's move to the final question" or "Thank you") and move directly to the synthesis question
-   - NO positive affirmations during transitions
-
-# Current Section Info
-**Section:** ${section.name}
-**Goal:** ${section.goal}
-**Section Prompt:** ${section.prompt}
-
-# Personality & Tone
-You are a neutral, professional interviewer maintaining high standards.
-
-**Content Guidelines:**
-- **No positive affirmations**: Avoid "Good point," "Exactly," "Great," "Nice," "Well done," "Excellent thinking," etc.
-- **No validating language**: Do not praise or affirm the candidate's responses during the interview
-- **Neutral acknowledgments only**: Use "I see," "Understood," "Let's move on," or simply proceed to the next question
-- **Exception**: You may use neutral transitions like "Thank you" or "Let's continue" when advancing sections
-- **Professional distance**: Maintain the tone of a rigorous, competent interviewer who is evaluating, not coaching
-- **Concise responses**: Keep responses to 2-3 sentences max unless explaining complex data
-- **Push for clarity**: Ask follow-up questions if reasoning is unclear, but without praise
-
-**Voice & Delivery (Critical for Natural Speech):**
-- **Sound human and conversational**: Speak like a real person, not a robot reading a script
-- **Use natural pacing**: Vary your speed — slow down for important points, speed up slightly for transitions
-- **Add subtle vocal variety**: Use slight pitch changes to emphasize key words and maintain engagement
-- **Natural pauses**: Include brief, natural pauses between thoughts (not robotic uniform spacing)
-- **Conversational inflections**: Use upward inflections for questions, downward for statements
-- **Section transitions**: Add warmth during transitions — let your voice signal "we're moving forward together"
-- **Thinking sounds**: Occasional natural sounds like "Mm," "Alright," or brief pauses before responding add realism
-- **Emotional authenticity**: Sound like you're genuinely listening and thinking, not just executing a script
-- **Avoid monotone**: Each sentence should have natural rhythm and flow, like a real conversation
-
-# Tools Available
-- **get_case_section**: Fetch case data and section details (CALL THIS FIRST!)
-- **reveal_hint**: Progressive hints (use sparingly, only when candidate is stuck)
-- **calc_basic**: Arithmetic calculator (REQUIRED for all math)
-- **score_response**: Score current section before advancing
-- **advance_section**: Move to next section (only after scoring)`,
-              voice: 'verse', // Expressive, natural, warm voice for human-like engagement
+              instructions: systemPrompt,
+              voice: 'alloy', // Professional female voice
               turn_detection: {
                 type: 'server_vad',
                 threshold: 0.5,
                 prefix_padding_ms: 300,
                 silence_duration_ms: 500,
               },
-              tools: REALTIME_TOOL_DEFINITIONS,
+              tools: COMPACT_TOOL_DEFINITIONS,
               tool_choice: 'auto',
             },
           }
@@ -456,34 +399,42 @@ You are a neutral, professional interviewer maintaining high standards.
                 logEvent('tool_call_received', { name: event.name, call_id: event.call_id })
                 try {
                   const toolArgs = JSON.parse(event.arguments)
-                  // Pass context for demo mode
-                  const toolContext = {
-                    caseId: caseData.id,
-                    currentSection: currentSection,
-                  }
-                  const toolResult = await handleRealtimeTool(event.name, toolArgs, toolContext)
+                  const toolResult = await handleCompactTool(event.name, toolArgs)
 
                   // Handle special tool responses
-                  if (event.name === 'advance_section' && toolResult.next_section) {
-                    setCurrentSection(toolResult.next_section)
+                  if (event.name === 'get_next_line') {
+                    // Update CaseCard and LineCard with new line
+                    if (toolResult.caseCard && toolResult.lineCard) {
+                      setCaseCard(toolResult.caseCard)
+                      setLineCard(toolResult.lineCard)
+                      setCurrentSection(toolResult.caseCard.section)
+                      setCurrentLineId(toolResult.caseCard.line_id)
 
-                    // Fetch new section details
-                    const newSectionResponse = await fetch('/api/voice-tools/get-case-section', {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ caseId: caseData.id, attemptId }),
-                    })
-
-                    if (newSectionResponse.ok) {
-                      const newSectionData = await newSectionResponse.json()
-                      setTotalHints(newSectionData.section.hints?.length || 0)
+                      // Update hints count for new line
+                      const newHintsCount = toolResult.lineCard.hints?.length || 0
+                      setTotalHints(newHintsCount)
                       setHintsUsed(0)
+
+                      // Update session with new prompt
+                      const newPrompt = generateCompactSystemPrompt(
+                        languageName,
+                        toolResult.caseCard,
+                        toolResult.lineCard
+                      )
+
+                      dc.send(JSON.stringify({
+                        type: 'session.update',
+                        session: {
+                          instructions: newPrompt,
+                        },
+                      }))
+                    }
+
+                    if (toolResult.completed) {
+                      logEvent('interview_completed')
                     }
                   } else if (event.name === 'reveal_hint') {
                     setHintsUsed((prev) => prev + 1)
-                  } else if (event.name === 'advance_section' && toolResult.completed) {
-                    // Interview completed
-                    logEvent('interview_completed')
                   }
 
                   // Send tool result back to Realtime API
