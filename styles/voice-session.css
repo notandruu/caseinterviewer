@@ -1,0 +1,162 @@
+/**
+ * Voice Session V2 Styles
+ * Colors: Yellow #F6C342, Grey #3A3A3A, Secondary #555
+ */
+
+:root {
+  --vs-yellow: #F6C342;
+  --vs-grey: #3A3A3A;
+  --vs-grey-secondary: #555;
+  --vs-white: #ffffff;
+}
+
+/* Respect reduced motion preference */
+@media (prefers-reduced-motion: reduce) {
+  .vs-orb,
+  .vs-mic-bar,
+  .vs-fade-in {
+    animation: none !important;
+    transition: opacity 0.2s ease-in-out !important;
+  }
+}
+
+/* Agent Orb Animations */
+@keyframes vs-pulse-speaking {
+  0%, 100% { transform: scale(0.96); }
+  50% { transform: scale(1.03); }
+}
+
+@keyframes vs-breathe-processing {
+  0%, 100% { transform: scale(0.98); }
+  50% { transform: scale(1.02); }
+}
+
+.vs-orb {
+  transition: transform 200ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.vs-orb--speaking {
+  animation: vs-pulse-speaking 400ms ease-in-out infinite;
+}
+
+.vs-orb--processing {
+  animation: vs-breathe-processing 1600ms ease-in-out infinite;
+}
+
+.vs-orb--listening {
+  /* Static - no animation */
+}
+
+/* Reduced motion fallback */
+@media (prefers-reduced-motion: reduce) {
+  .vs-orb--speaking {
+    animation: none;
+    opacity: 0.9;
+  }
+
+  .vs-orb--processing {
+    animation: none;
+    opacity: 0.85;
+  }
+}
+
+/* Microphone Visualizer */
+.vs-mic-visualizer {
+  display: flex;
+  gap: 2px;
+  align-items: center;
+  height: 60px;
+}
+
+.vs-mic-bar {
+  width: 3px;
+  background-color: var(--vs-grey-secondary);
+  border-radius: 2px;
+  transition: height 50ms ease-out, background-color 150ms ease-out;
+}
+
+.vs-mic-bar--active {
+  background-color: var(--vs-grey);
+}
+
+/* Fade in animation for transcript */
+@keyframes vs-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.vs-fade-in {
+  animation: vs-fade-in 200ms ease-out;
+}
+
+/* Screen layout */
+.vs-screen {
+  background-color: var(--vs-white);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+}
+
+.vs-transcript-line {
+  color: var(--vs-grey);
+  font-size: 1.125rem;
+  line-height: 1.75;
+  text-align: center;
+  max-width: 42rem;
+  margin: 1.5rem 0;
+}
+
+.vs-caption {
+  color: var(--vs-grey-secondary);
+  font-size: 0.875rem;
+  text-transform: lowercase;
+  letter-spacing: 0.05em;
+}
+
+/* Mic button */
+.vs-mic-button {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  border: none;
+  background-color: var(--vs-grey);
+  color: var(--vs-white);
+  cursor: pointer;
+  transition: background-color 200ms ease-out, transform 100ms ease-out;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.vs-mic-button:hover {
+  transform: scale(1.05);
+}
+
+.vs-mic-button:active {
+  transform: scale(0.95);
+}
+
+.vs-mic-button--recording {
+  background-color: var(--vs-yellow);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .vs-mic-button:hover {
+    transform: none;
+    opacity: 0.9;
+  }
+
+  .vs-mic-button:active {
+    transform: none;
+    opacity: 0.8;
+  }
+}
