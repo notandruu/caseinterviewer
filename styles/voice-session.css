@@ -198,3 +198,13 @@
     opacity: 0.8;
   }
 }
+
+/* Timer pulse animation */
+@keyframes vs-timer-pulse {
+  0%, 100% {
+    transform: translateX(-50%) scale(1);
+  }
+  50% {
+    transform: translateX(-50%) scale(1.05);
+  }
+}

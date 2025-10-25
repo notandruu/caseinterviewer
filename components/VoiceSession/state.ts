@@ -49,13 +49,29 @@ export const INITIAL_STATE: SessionState = 'agent_speaking'
  * Processing captions (randomized)
  */
 const PROCESSING_CAPTIONS = [
-  'thinking…',
-  'analyzing…',
-  'considering…',
-  'processing…',
-  'evaluating…',
+  'contemplating…',
+  'reflecting…',
+  'digesting that…',
+  'letting that sink in…',
+  'thinking it through…',
 ]
 
 export function getProcessingCaption(): string {
   return PROCESSING_CAPTIONS[Math.floor(Math.random() * PROCESSING_CAPTIONS.length)]
+}
+
+/**
+ * Get caption for current state (for screen readers)
+ */
+export function getStateCaption(state: SessionState): string {
+  switch (state) {
+    case 'agent_speaking':
+      return 'interviewer speaking'
+    case 'user_listening':
+      return 'listening for your response'
+    case 'processing':
+      return 'processing your answer'
+    default:
+      return ''
+  }
 }
