@@ -73,7 +73,7 @@ Note: Map dimensions as follows for database compatibility:
       .join("\n\n")
 
     const { text } = await generateText({
-      model: openai("gpt-4.5-preview"),
+      model: openai("gpt-4o"),
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: `Transcript:\n\n${conversationText}` },

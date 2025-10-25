@@ -29,7 +29,7 @@ Keep your analysis brief and actionable. Return JSON format:
 }`
 
     const { text } = await generateText({
-      model: openai("gpt-4.5-preview"),
+      model: openai("gpt-4o"),
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: `Candidate said: "${userMessage}"` },
