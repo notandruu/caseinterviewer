@@ -37,6 +37,7 @@ export function VoiceSessionV2({ caseData, interviewId, userId }: VoiceSessionPr
   const [displayedText, setDisplayedText] = useState('') // For synchronized text animation
   const [caseStage, setCaseStage] = useState<CaseStage>('intro')
   const [showExhibits, setShowExhibits] = useState(false)
+  const [textModeEnabled, setTextModeEnabled] = useState(true) // Toggle for text display
 
   const router = useRouter()
   const supabase = createClient()
@@ -540,24 +541,43 @@ export function VoiceSessionV2({ caseData, interviewId, userId }: VoiceSessionPr
       {/* Data Exhibits Slideover */}
       <DataExhibitSlideover exhibits={sampleExhibits} />
 
-      {/* End Interview Button */}
-      <button
-        onClick={endInterview}
-        style={{
-          position: 'absolute',
-          top: '2rem',
-          right: '2rem',
-          padding: '0.5rem 1rem',
-          backgroundColor: 'transparent',
-          border: '1px solid #555',
-          borderRadius: '0.5rem',
-          color: '#555',
-          cursor: 'pointer',
-          fontSize: '0.875rem',
-        }}
-      >
-        End Interview
-      </button>
+      {/* Settings and End Interview */}
+      <div style={{ position: 'absolute', top: '2rem', right: '2rem', display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+        {/* Text Mode Toggle */}
+        <button
+          onClick={() => setTextModeEnabled(!textModeEnabled)}
+          style={{
+            padding: '0.5rem 1rem',
+            backgroundColor: textModeEnabled ? '#F6C342' : 'transparent',
+            border: `1px solid ${textModeEnabled ? '#F6C342' : '#555'}`,
+            borderRadius: '0.5rem',
+            color: textModeEnabled ? '#3A3A3A' : '#555',
+            cursor: 'pointer',
+            fontSize: '0.75rem',
+            fontWeight: 500,
+            transition: 'all 200ms ease',
+          }}
+          title={textModeEnabled ? 'Text mode: ON (easier)' : 'Text mode: OFF (high stakes)'}
+        >
+          {textModeEnabled ? '📝 Text On' : '🎯 Text Off'}
+        </button>
+
+        {/* End Interview Button */}
+        <button
+          onClick={endInterview}
+          style={{
+            padding: '0.5rem 1rem',
+            backgroundColor: 'transparent',
+            border: '1px solid #555',
+            borderRadius: '0.5rem',
+            color: '#555',
+            cursor: 'pointer',
+            fontSize: '0.875rem',
+          }}
+        >
+          End Interview
+        </button>
+      </div>
 
       {/* Main content */}
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3rem' }}>
@@ -569,12 +589,29 @@ export function VoiceSessionV2({ caseData, interviewId, userId }: VoiceSessionPr
           <MicVisualizer analyser={analyserRef.current} isActive={isRecording} />
         )}
 
-        {/* Transcript Display with horizontal fade */}
-        <div className="vs-transcript-container">
-          <div className="vs-transcript-line vs-fade-in">
-            {displayText}
+        {/* Transcript Display with horizontal fade - conditionally hidden */}
+        {textModeEnabled && (
+          <div className="vs-transcript-container">
+            <div className="vs-transcript-line vs-fade-in">
+              {displayText}
+            </div>
           </div>
-        </div>
+        )}
+
+        {/* Text Mode Off Message */}
+        {!textModeEnabled && sessionState === 'agent_speaking' && (
+          <div style={{
+            fontSize: '0.875rem',
+            color: '#555',
+            fontStyle: 'italic',
+            textAlign: 'center',
+            minHeight: '3.5rem',
+            display: 'flex',
+            alignItems: 'center',
+          }}>
+            [High Stakes Mode - Listen Carefully]
+          </div>
+        )}
 
         {/* Caption */}
         <div className="vs-caption" aria-live="polite" aria-atomic="true">
