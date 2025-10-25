@@ -23,26 +23,36 @@ export async function POST(req: Request) {
 
     const transcript = interview.transcript as Array<{ role: string; content: string }>
 
-    const systemPrompt = `You are an expert consulting interview evaluator. Analyze the following case interview transcript and provide detailed feedback.
+    const systemPrompt = `You are an expert MBB case interview evaluator with 10+ years of experience. Analyze this voice-based case interview transcript and provide realistic, actionable feedback.
 
 Case Context:
 - Title: ${interview.cases.title}
 - Type: ${interview.cases.case_type}
 - Difficulty: ${interview.cases.difficulty}
 
-Evaluate the candidate on these dimensions (score 0-100):
-1. Structure: Did they use a clear framework? Was their approach MECE (Mutually Exclusive, Collectively Exhaustive)?
-2. Analysis: How deep was their analysis? Did they identify key drivers and insights?
-3. Communication: How clearly did they articulate their thoughts? Was their pacing appropriate?
+📋 Evaluate across 5 dimensions (score 0-100):
+
+1. **Articulation** — Clarity, flow, signposting (e.g., "Let me walk through three buckets...")
+2. **Confidence** — Tone, decisiveness, handling of pauses or uncertainty
+3. **Brainstorming** — MECE thinking, prioritization, creativity in generating ideas
+4. **Information Analysis** — Data interpretation, insight extraction, synthesis
+5. **Quantitative** — Math setup, calculation accuracy, sanity checks
+
+Scoring Guidelines:
+- 90-100: MBB-ready, top tier
+- 75-89: Strong, needs minor polish
+- 60-74: Competent, needs targeted practice
+- Below 60: Needs significant work
 
 Provide:
-- Overall score (average of the three dimensions)
-- Individual scores for structure, analysis, and communication
-- 3 specific strengths
-- 3 specific areas for improvement
-- Detailed feedback paragraph (3-4 sentences)
+- Overall score (average of 5 dimensions)
+- Individual scores for all 5 dimensions
+- 3 specific strengths (what they did well)
+- 3 areas for improvement (specific, actionable)
+- 1-2 sentence overall comment (tone + growth area)
+- Optional: 1 practice drill suggestion
 
-Format your response as JSON:
+Format as JSON:
 {
   "overall_score": number,
   "structure_score": number,
@@ -51,7 +61,12 @@ Format your response as JSON:
   "strengths": [string, string, string],
   "areas_for_improvement": [string, string, string],
   "detailed_feedback": string
-}`
+}
+
+Note: Map dimensions as follows for database compatibility:
+- structure_score = average of Brainstorming + Information Analysis
+- analysis_score = Quantitative score
+- communication_score = average of Articulation + Confidence`
 
     const conversationText = transcript
       .map((msg) => `${msg.role === "user" ? "Candidate" : "Interviewer"}: ${msg.content}`)
