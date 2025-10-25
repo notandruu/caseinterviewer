@@ -149,7 +149,7 @@ export function VoiceSessionV2({ caseData, interviewId, userId }: VoiceSessionPr
 
   // Silence detection loop when user is listening
   useEffect(() => {
-    if (sessionState !== 'user_listening' || !silenceDetectorRef.current) return
+    if (sessionState !== 'user_listening' || !silenceDetectorRef.current || !isRecording) return
 
     const interval = setInterval(() => {
       if (silenceDetectorRef.current?.checkSilence()) {
@@ -158,6 +158,7 @@ export function VoiceSessionV2({ caseData, interviewId, userId }: VoiceSessionPr
           : 0
 
         logEvent('silence_detected', { duration_ms: silenceDuration })
+        stopRecording() // Stop recording before transitioning to processing
         dispatch({ type: 'SILENCE_DETECTED' })
         setProcessingCaption(getProcessingCaption())
         silenceStartRef.current = null
@@ -170,7 +171,7 @@ export function VoiceSessionV2({ caseData, interviewId, userId }: VoiceSessionPr
     }, 100)
 
     return () => clearInterval(interval)
-  }, [sessionState])
+  }, [sessionState, isRecording])
 
   // Track state changes
   useEffect(() => {
@@ -207,15 +208,6 @@ export function VoiceSessionV2({ caseData, interviewId, userId }: VoiceSessionPr
       setTimerSeconds(120)
     }
   }, [caseStage])
-
-  // Auto-start/stop recording based on state
-  useEffect(() => {
-    if (sessionState === 'user_listening') {
-      startRecording()
-    } else {
-      stopRecording()
-    }
-  }, [sessionState])
 
   const speakWelcome = () => {
     const welcomeMessage: TranscriptMessage = {
