@@ -32,7 +32,7 @@ export function AgentOrb({ mode, energy = 0.5 }: AgentOrbProps) {
           width: '240px',
           height: '240px',
           borderRadius: '50%',
-          backgroundColor: '#F6C342', // Yellow
+          backgroundColor: '#2196F3', // Blue
           opacity,
           willChange: mode === 'user_listening' ? 'auto' : 'transform, opacity',
         }}

@@ -1,10 +1,10 @@
 /**
  * Voice Session V2 Styles
- * Colors: Yellow #F6C342, Grey #3A3A3A, Secondary #555
+ * Colors: Blue #2196F3, Grey #3A3A3A, Secondary #555
  */
 
 :root {
-  --vs-yellow: #F6C342;
+  --vs-yellow: #2196F3;
   --vs-grey: #3A3A3A;
   --vs-grey-secondary: #555;
   --vs-white: #ffffff;
