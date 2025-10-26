@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge"
 import { Clock, TrendingUp, Target, Flame } from "lucide-react"
 import Link from "next/link"
 import { getMockSession, getMockUser } from "@/lib/auth/mock-auth"
+import { EchoTokensWidget } from "@/components/echo/EchoTokensWidget"
 
 export default async function DashboardPage() {
   const isAuthenticated = await getMockSession()
@@ -89,12 +90,7 @@ export default async function DashboardPage() {
             <span className="text-xl font-bold">Case Now</span>
           </div>
           <div className="flex items-center gap-4">
-            <span className="text-sm text-muted-foreground">Welcome, {profile?.full_name || mockUser.full_name}</span>
-            <form action="/api/auth/signout" method="post">
-              <Button variant="ghost" size="sm" type="submit">
-                Sign out
-              </Button>
-            </form>
+            <EchoTokensWidget />
           </div>
         </div>
       </header>
