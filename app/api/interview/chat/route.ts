@@ -1,12 +1,6 @@
-import { createOpenAI } from "@ai-sdk/openai"
+import { openai } from "@ai-sdk/openai"
 import { generateText } from "ai"
 import { getMockSession } from "@/lib/auth/mock-auth"
-
-// Echo-wrapped OpenAI client with automatic billing
-const echoOpenAI = createOpenAI({
-  apiKey: process.env.ECHO_API_KEY || '',
-  baseURL: 'https://api.meritsystems.io/v1/openai',
-})
 
 export async function POST(req: Request) {
   try {
@@ -101,7 +95,7 @@ Critical Rules:
 Remember: The script has 5 sections. Reference ONLY the section you're currently in. The script content is already written in spoken form - use it as-is.`
 
     const { text } = await generateText({
-      model: echoOpenAI("gpt-4o"),
+      model: openai("gpt-4o"),
       messages: [
         { role: "system", content: systemPrompt },
         ...messages.map((m: any) => ({
