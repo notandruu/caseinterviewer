@@ -224,6 +224,9 @@ export function VoiceSessionV2({ caseData, interviewId, userId }: VoiceSessionPr
           timestamp: new Date(),
         }
         setMessages([welcomeMessage])
+
+        // Update state machine to agent_speaking
+        dispatch({ type: 'LLM_RESPONSE_READY', payload: data.message })
         speakText(data.message)
       }
     } catch (error) {
