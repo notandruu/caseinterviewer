@@ -27,6 +27,16 @@ const STAGE_KEYWORDS: Record<CaseStage, string[]> = {
   synthesis: ['recommend', 'conclusion', 'summary', 'synthesize', 'final']
 }
 
+// Timer durations for each stage (in seconds)
+const STAGE_DURATIONS: Record<CaseStage, number> = {
+  intro: 60,         // 1 minute for intro/clarifying
+  clarifying: 60,    // 1 minute for clarifying questions
+  structuring: 120,  // 2 minutes for structuring
+  analysis: 180,     // 3 minutes for analysis
+  brainstorming: 120, // 2 minutes for brainstorming
+  synthesis: 90      // 1.5 minutes for synthesis
+}
+
 export function VoiceSessionV2({ caseData, interviewId, userId }: VoiceSessionProps) {
   const [sessionState, dispatch] = useReducer(reducer, INITIAL_STATE)
   const [messages, setMessages] = useState<TranscriptMessage[]>([])
@@ -40,7 +50,6 @@ export function VoiceSessionV2({ caseData, interviewId, userId }: VoiceSessionPr
   const [textModeEnabled, setTextModeEnabled] = useState(true) // Toggle for text display
   const [timerSeconds, setTimerSeconds] = useState(120) // 2 minutes for structuring
   const [timerActive, setTimerActive] = useState(false)
-  const [showTimer, setShowTimer] = useState(true) // Toggle for timer visibility
 
   const router = useRouter()
   const supabase = createClient()
@@ -59,6 +68,7 @@ export function VoiceSessionV2({ caseData, interviewId, userId }: VoiceSessionPr
 
   const startTimeRef = useRef<Date>(new Date())
   const silenceStartRef = useRef<number | null>(null)
+  const transcriptLineRef = useRef<HTMLDivElement>(null)
 
   // Initialize audio and speech recognition
   useEffect(() => {
@@ -189,18 +199,27 @@ export function VoiceSessionV2({ caseData, interviewId, userId }: VoiceSessionPr
     return () => clearInterval(interval)
   }, [timerActive, caseStage])
 
-  // Auto-start timer when entering structuring stage
+  // Auto-start timer when entering any stage with a duration
   useEffect(() => {
-    if (caseStage === 'structuring' && !timerActive && timerSeconds === 120) {
+    const stageDuration = STAGE_DURATIONS[caseStage]
+    if (stageDuration && !timerActive) {
+      setTimerSeconds(stageDuration)
       setTimerActive(true)
-      logEvent('timer_started', { stage: caseStage, duration: 120 })
+      logEvent('timer_started', { stage: caseStage, duration: stageDuration })
     }
-    // Reset timer when leaving structuring stage
-    if (caseStage !== 'structuring' && timerActive) {
+
+    // Stop timer when leaving a stage
+    return () => {
       setTimerActive(false)
-      setTimerSeconds(120)
     }
   }, [caseStage])
+
+  // Auto-scroll transcript to bottom when text changes
+  useEffect(() => {
+    if (transcriptLineRef.current) {
+      transcriptLineRef.current.scrollTop = transcriptLineRef.current.scrollHeight
+    }
+  }, [displayedText, currentTranscript])
 
   const speakWelcome = async () => {
     // Get case introduction from AI (first message)
@@ -564,25 +583,6 @@ export function VoiceSessionV2({ caseData, interviewId, userId }: VoiceSessionPr
 
       {/* Settings and End Interview */}
       <div style={{ position: 'absolute', top: '2rem', right: '2rem', display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
-        {/* Timer Toggle */}
-        <button
-          onClick={() => setShowTimer(!showTimer)}
-          style={{
-            padding: '0.5rem 1rem',
-            backgroundColor: showTimer ? '#2196F3' : 'transparent',
-            border: `1px solid ${showTimer ? '#2196F3' : '#555'}`,
-            borderRadius: '0.5rem',
-            color: showTimer ? '#ffffff' : '#555',
-            cursor: 'pointer',
-            fontSize: '0.75rem',
-            fontWeight: 500,
-            transition: 'all 200ms ease',
-          }}
-          title={showTimer ? 'Timer: ON' : 'Timer: OFF (hidden)'}
-        >
-          {showTimer ? '⏱️ Timer' : '⏱️ Hidden'}
-        </button>
-
         {/* Text Mode Toggle */}
         <button
           onClick={() => setTextModeEnabled(!textModeEnabled)}
@@ -599,7 +599,7 @@ export function VoiceSessionV2({ caseData, interviewId, userId }: VoiceSessionPr
           }}
           title={textModeEnabled ? 'Text mode: ON (easier)' : 'Text mode: OFF (high stakes)'}
         >
-          {textModeEnabled ? '📝 Text' : '🎯 No Text'}
+          {textModeEnabled ? 'Text' : 'No Text'}
         </button>
 
         {/* End Interview Button */}
@@ -619,17 +619,16 @@ export function VoiceSessionV2({ caseData, interviewId, userId }: VoiceSessionPr
         </button>
       </div>
 
-      {/* Structuring Timer */}
-      {caseStage === 'structuring' && showTimer && (
+      {/* Timer - positioned in top right to avoid interference */}
+      {timerActive && (
         <div style={{
           position: 'absolute',
-          top: '7rem',
-          left: '50%',
-          transform: 'translateX(-50%)',
-          padding: '1rem 2rem',
+          top: '2rem',
+          right: textModeEnabled ? '16rem' : '14rem', // Adjust based on buttons
+          padding: '0.75rem 1.5rem',
           backgroundColor: timerSeconds <= 30 ? '#ff6b6b' : '#2196F3',
           borderRadius: '2rem',
-          fontSize: '2rem',
+          fontSize: '1.5rem',
           fontWeight: 700,
           color: '#ffffff',
           boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
@@ -653,7 +652,7 @@ export function VoiceSessionV2({ caseData, interviewId, userId }: VoiceSessionPr
         {/* Transcript Display with horizontal fade - conditionally hidden */}
         {textModeEnabled && (
           <div className="vs-transcript-container">
-            <div className="vs-transcript-line vs-fade-in">
+            <div ref={transcriptLineRef} className="vs-transcript-line vs-fade-in">
               {displayText}
             </div>
           </div>

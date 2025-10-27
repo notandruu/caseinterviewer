@@ -19,32 +19,35 @@ export async function POST(req: Request) {
       // First message - case introduction
       sectionInstruction = 'This is the FIRST message. Find "1. Case Introduction" in the script below and speak ONLY that section word-for-word. Do not add anything else.'
     } else if (messageCount <= 2) {
-      // Early in interview - structuring
-      sectionInstruction = 'Find "2. Structuring Prompt" in the script below and speak it. Guide them to structure their approach.'
+      // Early in interview - structuring (messages 1-2)
+      sectionInstruction = 'The candidate just gave their response. Now move to "2. Structuring Prompt" in the script. Read it EXACTLY as written to ask them to structure their approach. Do NOT wait for more info - immediately present the structuring prompt.'
     } else if (messageCount <= 6) {
-      // Mid interview - quant and brainstorm
-      sectionInstruction = 'Find "3. Deeper Exploration" in the script below. Present the next question (Quant 1, Quant 2, or Brainstorm) based on what you\'ve already asked.'
+      // Mid interview - deeper exploration (messages 3-6)
+      sectionInstruction = 'The candidate responded. Now move to "3. Deeper Exploration" in the script. Present the next question from this section (Quant 1, Quant 2, or Brainstorm). If you already asked a question from this section, ask the NEXT one. Keep moving through the questions - do not wait.'
     } else if (messageCount <= 8) {
-      // Late interview - recommendation
-      sectionInstruction = 'Find "4. Recommendation Prompt" in the script below and ask for their final recommendation.'
+      // Late interview - recommendation (messages 7-8)
+      sectionInstruction = 'The candidate responded. Now move to "4. Recommendation Prompt" in the script. Ask them to synthesize everything and provide their final recommendation. Read the prompt EXACTLY as written.'
     } else {
-      // End - feedback
-      sectionInstruction = 'Find "5. Interviewer Feedback" in the script below and provide closing feedback.'
+      // End - feedback (message 9+)
+      sectionInstruction = 'Final stage. Find "5. Interviewer Feedback" in the script and provide your closing feedback based on their performance. Keep it concise and specific.'
     }
 
-    const systemPrompt = `You are a case interviewer. Your job is simple: read from the script below, section by section.
+    const systemPrompt = `You are a case interviewer. Your job is to KEEP THE INTERVIEW MOVING by reading from the script below, section by section.
 
 ${sectionInstruction}
 
-CASE SCRIPT:
-${caseContext.prompt}
-
-RULES:
+CRITICAL RULES:
+- After the candidate responds, IMMEDIATELY move to the next section of the script
+- Do NOT ask "Is there anything else?" or wait for more information
+- Do NOT engage in back-and-forth discussion - keep progressing through the case
 - Speak the script content EXACTLY as written (it's already in spoken form)
 - Do NOT add section numbers or headers when speaking
 - Do NOT speak multiple sections at once
-- Keep it natural and conversational
-- Output PLAIN TEXT ONLY - no markdown, no special characters`
+- Keep it natural and conversational (but KEEP MOVING FORWARD)
+- Output PLAIN TEXT ONLY - no markdown, no special characters
+
+CASE SCRIPT:
+${caseContext.prompt}`
 
     const { text } = await generateText({
       model: openai("gpt-4o"),

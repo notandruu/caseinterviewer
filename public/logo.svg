@@ -1,0 +1,18 @@
+<svg width="100" height="120" viewBox="0 0 100 120" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Blue head/speech bubble shape -->
+  <path d="M20 20 L75 15 L80 25 L85 65 L30 70 L25 30 Z" fill="#2196F3" stroke="#2196F3" stroke-width="3"/>
+
+  <!-- Eye dot -->
+  <circle cx="45" cy="35" r="4" fill="white"/>
+
+  <!-- Mouth/wave -->
+  <path d="M35 55 Q40 50 45 55 Q50 60 55 55" stroke="white" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+
+  <!-- Square bracket detail -->
+  <path d="M65 30 L70 30 L70 50 L65 50" stroke="white" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+  <path d="M60 35 L65 35 L65 45 L60 45 Z" fill="white"/>
+
+  <!-- Red tie -->
+  <path d="M30 75 L40 75 L35 105 L30 75 Z" fill="#E53935"/>
+  <path d="M32 77 L34 80 L36 77 L38 80 L36 83 L34 80 Z" stroke="#C62828" stroke-width="1.5" fill="none"/>
+</svg>

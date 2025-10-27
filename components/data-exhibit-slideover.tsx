@@ -11,6 +11,8 @@ interface DataExhibit {
   title: string
   type: "chart" | "table" | "image"
   data: any
+  imageUrl?: string
+  description?: string
 }
 
 interface DataExhibitSlideoverProps {
@@ -65,13 +67,23 @@ export function DataExhibitSlideover({ exhibits = [] }: DataExhibitSlideoverProp
               {exhibits.map((exhibit) => (
                 <Card key={exhibit.id} className="p-4">
                   <h3 className="mb-3 font-medium">{exhibit.title}</h3>
-                  <div className="rounded-lg bg-muted p-4">
-                    {/* Placeholder for actual chart/data rendering */}
-                    <div className="flex h-48 items-center justify-center text-sm text-muted-foreground">
-                      {exhibit.type === "chart" && "Chart visualization"}
-                      {exhibit.type === "table" && "Table data"}
-                      {exhibit.type === "image" && "Image exhibit"}
-                    </div>
+                  {exhibit.description && (
+                    <p className="mb-3 text-sm text-muted-foreground">{exhibit.description}</p>
+                  )}
+                  <div className="rounded-lg bg-white border p-4">
+                    {exhibit.imageUrl ? (
+                      <img
+                        src={exhibit.imageUrl}
+                        alt={exhibit.title}
+                        className="w-full h-auto rounded"
+                      />
+                    ) : (
+                      <div className="flex h-48 items-center justify-center text-sm text-muted-foreground">
+                        {exhibit.type === "chart" && "Chart visualization"}
+                        {exhibit.type === "table" && "Table data"}
+                        {exhibit.type === "image" && "Image exhibit"}
+                      </div>
+                    )}
                   </div>
                 </Card>
               ))}
