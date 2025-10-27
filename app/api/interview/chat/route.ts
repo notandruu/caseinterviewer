@@ -1,12 +1,12 @@
 import { generateText } from "ai"
-import { getMockSession } from "@/lib/auth/mock-auth"
+import { isEchoAuthenticated } from "@/lib/auth/echo-auth"
 import { createOpenAI } from "@ai-sdk/openai"
 
 export async function POST(req: Request) {
   try {
     const { messages, caseContext, interviewId } = await req.json()
 
-    const isAuthenticated = await getMockSession()
+    const isAuthenticated = await isEchoAuthenticated()
     if (!isAuthenticated) {
       return Response.json({ error: "Unauthorized" }, { status: 401 })
     }
