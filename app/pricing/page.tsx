@@ -11,18 +11,18 @@ export default function PricingPage() {
   const router = useRouter()
   const { isLoggedIn, freeTierBalance, createPaymentLink } = useEcho()
 
-  const handleUpgrade = async () => {
+  const handleAddFunds = async (amount: number) => {
     if (!isLoggedIn) {
       router.push('/auth/login')
       return
     }
 
     try {
-      // Create payment link for $15/month subscription
+      // Create payment link to add funds to Echo balance
       const paymentUrl = await createPaymentLink(
-        15, // $15
-        'Case Now Pro - Monthly Subscription',
-        window.location.origin + '/dashboard?upgraded=true'
+        amount,
+        `Add $${amount} to your Case Now balance`,
+        window.location.origin + '/dashboard?funded=true'
       )
       window.location.href = paymentUrl
     } catch (error) {
@@ -114,25 +114,27 @@ export default function PricingPage() {
             <CardHeader>
               <div>
                 <CardTitle className="text-2xl text-blue-600">Pro</CardTitle>
-                <CardDescription className="mt-2">Unlimited practice for serious prep</CardDescription>
+                <CardDescription className="mt-2">Pay-as-you-go for flexible practice</CardDescription>
               </div>
               <div className="mt-4">
-                <span className="text-4xl font-bold">$15</span>
-                <span className="text-gray-600 ml-2">/ month</span>
+                <span className="text-4xl font-bold">Pay per use</span>
+              </div>
+              <div className="mt-2">
+                <span className="text-sm text-gray-600">$5 per case interview • Powered by Echo</span>
               </div>
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
                 <div className="bg-blue-50 p-3 rounded-lg border border-blue-200">
                   <p className="text-sm font-medium text-blue-900">
-                    ✨ Unlimited case interviews
+                    ✨ Only pay for what you use
                   </p>
                 </div>
 
                 <ul className="space-y-3">
                   <li className="flex items-start gap-2">
                     <Check className="h-5 w-5 text-blue-600 mt-0.5 flex-shrink-0" />
-                    <span className="text-gray-700"><strong>Unlimited</strong> case interviews</span>
+                    <span className="text-gray-700"><strong>Usage-based</strong> pricing</span>
                   </li>
                   <li className="flex items-start gap-2">
                     <Check className="h-5 w-5 text-blue-600 mt-0.5 flex-shrink-0" />
@@ -156,12 +158,30 @@ export default function PricingPage() {
                   </li>
                 </ul>
 
-                <Button
-                  className="w-full mt-6 bg-blue-600 hover:bg-blue-700"
-                  onClick={handleUpgrade}
-                >
-                  Upgrade to Pro
-                </Button>
+                <div className="space-y-3 mt-6">
+                  <p className="text-sm text-gray-600 text-center">Add funds to get started:</p>
+                  <div className="grid grid-cols-3 gap-2">
+                    <Button
+                      variant="outline"
+                      onClick={() => handleAddFunds(10)}
+                    >
+                      $10
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={() => handleAddFunds(25)}
+                      className="border-blue-600 text-blue-600"
+                    >
+                      $25
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={() => handleAddFunds(50)}
+                    >
+                      $50
+                    </Button>
+                  </div>
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -177,20 +197,20 @@ export default function PricingPage() {
               </CardHeader>
               <CardContent>
                 <p className="text-gray-700">
-                  After using your 3 free cases, you'll need to upgrade to Pro to continue practicing.
-                  Pro gives you unlimited access to all cases for just $15/month.
+                  After using your 3 free cases, you'll pay $5 per additional case interview.
+                  This usage-based pricing lets you practice at your own pace without monthly commitments.
                 </p>
               </CardContent>
             </Card>
 
             <Card>
               <CardHeader>
-                <CardTitle className="text-lg">Can I cancel anytime?</CardTitle>
+                <CardTitle className="text-lg">How does usage-based pricing work?</CardTitle>
               </CardHeader>
               <CardContent>
                 <p className="text-gray-700">
-                  Yes! You can cancel your Pro subscription at any time. You'll continue to have access
-                  until the end of your current billing period.
+                  Simply add funds to your account through Echo, and you'll be charged $5 per case interview you complete.
+                  No subscriptions, no monthly fees - just pay for what you use.
                 </p>
               </CardContent>
             </Card>

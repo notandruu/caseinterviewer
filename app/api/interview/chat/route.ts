@@ -1,6 +1,6 @@
-import { openai } from "@ai-sdk/openai"
 import { generateText } from "ai"
 import { getMockSession } from "@/lib/auth/mock-auth"
+import { createOpenAI } from "@ai-sdk/openai"
 
 export async function POST(req: Request) {
   try {
@@ -10,6 +10,12 @@ export async function POST(req: Request) {
     if (!isAuthenticated) {
       return Response.json({ error: "Unauthorized" }, { status: 401 })
     }
+
+    // Create OpenAI instance configured to use Echo SDK router
+    const openai = createOpenAI({
+      baseURL: "https://echo.router.merit.systems/v1",
+      apiKey: process.env.OPENAI_API_KEY,
+    })
 
     // Determine which section to use based on conversation history
     const messageCount = messages.length
@@ -71,8 +77,25 @@ ${caseContext.prompt}`
       .replace(/`(.+?)`/g, '$1')        // Remove code `text`
 
     return Response.json({ message: cleanText })
-  } catch (error) {
+  } catch (error: any) {
     console.error("[v0] Error in chat route:", error)
+
+    // Handle Echo balance/quota errors
+    if (error?.status === 402 || error?.message?.includes('insufficient')) {
+      return Response.json({
+        error: "Insufficient balance",
+        message: "You don't have enough credits. Please add funds to continue.",
+        requiresPayment: true
+      }, { status: 402 })
+    }
+
+    if (error?.status === 429) {
+      return Response.json({
+        error: "Rate limit exceeded",
+        message: "Too many requests. Please try again in a moment."
+      }, { status: 429 })
+    }
+
     return Response.json({ error: "Internal server error" }, { status: 500 })
   }
 }
