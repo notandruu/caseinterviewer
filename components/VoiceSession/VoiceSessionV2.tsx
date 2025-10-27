@@ -281,12 +281,21 @@ export function VoiceSessionV2({ caseData, interviewId, userId }: VoiceSessionPr
       })
 
       if (!res.ok) {
-        throw new Error(`TTS API failed with status: ${res.status}`)
+        const errorText = await res.text()
+        console.error('[VoiceSessionV2] TTS API error:', res.status, errorText)
+
+        // Show error message but continue
+        setDisplayedText(`[TTS Error: ${res.status}] ${text}`)
+        dispatch({ type: 'TTS_END' })
+        return
       }
 
       const contentType = res.headers.get('content-type') || ''
       if (!contentType.includes('audio')) {
-        throw new Error('TTS API did not return audio')
+        console.error('[VoiceSessionV2] TTS did not return audio, got:', contentType)
+        setDisplayedText(`[No Audio] ${text}`)
+        dispatch({ type: 'TTS_END' })
+        return
       }
 
       const blob = await res.blob()
