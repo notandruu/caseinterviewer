@@ -1,51 +1,100 @@
-import { redirect } from "next/navigation"
-import { createClient } from "@/lib/supabase/server"
+'use client'
+
+import { useEffect, useState } from "react"
+import { useRouter } from "next/navigation"
+import { useEcho } from "@merit-systems/echo-react-sdk"
+import { createClient } from "@/lib/supabase/client"
 import { VoiceInterviewClient } from "@/components/voice-interview-client"
 import { VoiceSessionV2 } from "@/components/VoiceSession/VoiceSessionV2"
-import { isEchoAuthenticated, getEchoUserId } from "@/lib/auth/echo-auth"
 import { isV2Enabled } from "@/lib/config/features"
 
-export default async function InterviewPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params
+export default function InterviewPage({ params }: { params: { id: string } }) {
+  const router = useRouter()
+  const { isLoggedIn, isLoading, user } = useEcho()
+  const [caseData, setCaseData] = useState<any>(null)
+  const [interviewId, setInterviewId] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const supabase = createClient()
 
-  const isAuthenticated = await isEchoAuthenticated()
-  if (!isAuthenticated) {
-    redirect("/auth/login")
+  useEffect(() => {
+    if (!isLoading && !isLoggedIn) {
+      router.push('/auth/login')
+    }
+  }, [isLoggedIn, isLoading, router])
+
+  useEffect(() => {
+    if (!user?.id || !params.id) return
+
+    async function setupInterview() {
+      try {
+        // Fetch case data
+        const { data: fetchedCase, error: caseError } = await supabase
+          .from("cases")
+          .select("*")
+          .eq("id", params.id)
+          .single()
+
+        if (caseError || !fetchedCase) {
+          setError("Case not found")
+          router.push("/dashboard")
+          return
+        }
+
+        setCaseData(fetchedCase)
+
+        // Create interview session
+        const { data: interview, error: interviewError } = await supabase
+          .from("interviews")
+          .insert({
+            user_id: user.id,
+            case_id: params.id,
+            status: "in-progress",
+          })
+          .select()
+          .single()
+
+        if (interviewError || !interview) {
+          console.error("[Interview] Error creating interview:", interviewError)
+          setError("Failed to create interview session")
+          return
+        }
+
+        setInterviewId(interview.id)
+      } catch (err) {
+        console.error("[Interview] Setup error:", err)
+        setError("An error occurred")
+      }
+    }
+
+    setupInterview()
+  }, [user?.id, params.id])
+
+  if (isLoading || !user || !caseData || !interviewId) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-white">
+        <div className="h-3 w-3 rounded-full bg-[#2196F3] animate-pulse" />
+      </div>
+    )
   }
 
-  const userId = await getEchoUserId()
-  if (!userId) {
-    redirect("/auth/login")
+  if (error) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-white">
+        <div className="text-center">
+          <p className="text-red-600 mb-4">{error}</p>
+          <button
+            onClick={() => router.push('/dashboard')}
+            className="px-4 py-2 bg-[#2196F3] text-white rounded-lg"
+          >
+            Back to Dashboard
+          </button>
+        </div>
+      </div>
+    )
   }
-
-  const supabase = await createClient()
-
-  const { data: caseData } = await supabase.from("cases").select("*").eq("id", id).single()
-
-  if (!caseData) {
-    redirect("/dashboard")
-  }
-
-  // Create interview session in database
-  const { data: interview, error } = await supabase
-    .from("interviews")
-    .insert({
-      user_id: userId,
-      case_id: id,
-      status: "in-progress",
-    })
-    .select()
-    .single()
-
-  if (error || !interview) {
-    console.error("[v0] Error creating interview:", error)
-    redirect("/dashboard")
-  }
-
-  const interviewId = interview.id
 
   // Feature flag: use V2 if enabled, otherwise V1 (default)
   const InterviewComponent = isV2Enabled() ? VoiceSessionV2 : VoiceInterviewClient
 
-  return <InterviewComponent caseData={caseData} interviewId={interviewId} userId={userId} />
+  return <InterviewComponent caseData={caseData} interviewId={interviewId} userId={user.id} />
 }
