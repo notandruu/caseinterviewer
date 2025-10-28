@@ -2,21 +2,14 @@
 
 import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { useEcho } from '@merit-systems/echo-react-sdk'
 
 export default function HomePage() {
   const router = useRouter()
-  const { isLoggedIn, isLoading } = useEcho()
 
   useEffect(() => {
-    if (!isLoading) {
-      if (isLoggedIn) {
-        router.push('/dashboard')
-      } else {
-        router.push('/auth/login')
-      }
-    }
-  }, [isLoggedIn, isLoading, router])
+    // Always redirect to dashboard for demo (no auth required for 3 free cases)
+    router.push('/dashboard')
+  }, [router])
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-white">
