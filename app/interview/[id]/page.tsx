@@ -58,7 +58,9 @@ export default function InterviewPage({ params }: { params: Promise<{ id: string
 
         if (interviewError || !interview) {
           console.error("[Interview] Error creating interview:", interviewError)
-          setError("Failed to create interview session")
+          console.error("[Interview] User ID:", user.id)
+          console.error("[Interview] Case ID:", id)
+          setError(`Failed to create interview session: ${interviewError?.message || 'Unknown error'}`)
           return
         }
 
