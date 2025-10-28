@@ -10,7 +10,7 @@ import { isV2Enabled } from "@/lib/config/features"
 
 export default function InterviewPage({ params }: { params: Promise<{ id: string }> }) {
   const router = useRouter()
-  const { isLoggedIn, isLoading, user } = useEcho()
+  const { isLoggedIn, user } = useEcho()
   const [caseData, setCaseData] = useState<any>(null)
   const [interviewId, setInterviewId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
