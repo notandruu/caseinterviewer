@@ -299,6 +299,7 @@ export async function POST(request: NextRequest) {
           return NextResponse.json({ error: 'caseId required for demo mode' }, { status: 400 })
         }
         caseId = demoCaseId
+        // Skip fetching attempt in demo mode, no need to check auth or scores
       } else {
         const {
           data: { user },
@@ -316,7 +317,7 @@ export async function POST(request: NextRequest) {
         if (attempt.user_id !== user.id) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
         caseId = attempt.case_id
-        ;(body as any)._existingScores = (attempt as any).rubric_scores || {}
+        ;(body as any)._existingScores = attempt.rubric_scores || {}
       }
 
       // Fetch case rubric and section
@@ -340,9 +341,19 @@ export async function POST(request: NextRequest) {
       }
 
       // Build minimal CaseState and call Scorer
-      const baseState = await getCaseStateFromDB(attemptId)
+      let baseState = {}
+      if (!isDemoAttempt) {
+        baseState = await getCaseStateFromDB(attemptId)
+      }
       const targetSection = found.raw as CaseSection
-  const state = { ...baseState, currentSection: incomingSection, rubric: normalizeRubricForScorer(targetSection) }
+      const state = { 
+        ...baseState, 
+        currentSection: incomingSection, 
+        rubric: normalizeRubricForScorer(targetSection),
+        // Add minimal state for demo mode
+        isDemoAttempt,
+        caseId,
+      }
 
       const { json: scorerJson, usage, rawText } = await runScorer(state as any, analyzer_json)
 
@@ -368,34 +379,42 @@ export async function POST(request: NextRequest) {
         ? finalScore >= (targetSection as any).rubric.passing_score
         : finalScore >= 70
 
-      const sectionScore: SectionScore = {
-        scores: mappedScores,
-        comments,
-        section_passed: passing,
-        scored_at: new Date().toISOString(),
-      }
-
+      // Only save to DB in non-demo mode
       if (!isDemoAttempt) {
-  const existingScores = (body as any)._existingScores || {}
-  const updatedScores: RubricScores = { ...existingScores, [incomingSection ?? 'unknown']: sectionScore }
+        const sectionScore: SectionScore = {
+          scores: mappedScores,
+          comments,
+          section_passed: passing,
+          scored_at: new Date().toISOString(),
+        };
+        
+        try {
+          // Update attempt rubric scores
+          const existingScores = (body as any)._existingScores || {};
+          const updatedScores: RubricScores = { ...existingScores, [incomingSection ?? 'unknown']: sectionScore };
+          await supabase
+            .from('case_attempts')
+            .update({ rubric_scores: updatedScores })
+            .eq('id', attemptId);
 
-        await supabase
-          .from('case_attempts')
-          .update({ rubric_scores: updatedScores })
-          .eq('id', attemptId)
+          // Log scoring event
+          await supabase.from('case_events').insert({
+            attempt_id: attemptId,
+            event_type: 'response_scored_llm',
+            payload: { section: incomingSection ?? 'unknown', scorer_json: scorerJson },
+          });
 
-        await supabase.from('case_events').insert({
-          attempt_id: attemptId,
-          event_type: 'response_scored_llm',
-          payload: { section: incomingSection ?? 'unknown', scorer_json: scorerJson },
-        })
+          // Persist LLM turn data
+          await persistScorerTurn({
+            attemptId,
+            scorer_json: scorerJson,
+            usage,
+          });
+        } catch (dbError) {
+          // Log but continue - demo mode doesn't require successful DB writes
+          console.warn('[score-response] Failed to save LLM scoring:', dbError);
+        }
       }
-
-      await persistScorerTurn({
-        attemptId,
-        scorer_json: scorerJson,
-        usage,
-      })
 
       return NextResponse.json({
         scores: mappedScores,
