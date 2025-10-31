@@ -12,7 +12,7 @@ export type CaseState = {
   } | null;
 };
 
-export function buildInterviewerBlocks(s: CaseState): string[] {
+export function buildInterviewerBlocks(s: CaseState, nudge?: string): string[] {
   return [
     `CaseState:
 case_id: ${s.caseId}
@@ -21,6 +21,7 @@ role: ${s.role ?? "candidate"}
 objective: ${s.objective ?? ""}`,
     s.snippet ? `Snippet:\n${s.snippet}` : "Snippet: none",
     s.last_question ? `LastQuestion:\n${s.last_question}` : "LastQuestion: none",
+    nudge ? `Nudge:\n${nudge}` : "Nudge: none",
   ];
 }
 

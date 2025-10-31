@@ -185,10 +185,10 @@ export const CalcBasicResponseSchema = z.object({
 // score_response
 export const ScoreResponseRequestSchema = z.object({
   attemptId: attemptIdOrDemo,
-  section: SectionNameSchema,
-  extracted_numbers: z.record(z.number()),
-  bullets: z.array(z.string()),
-}).passthrough() // Allow extra fields for demo mode (caseId)
+  section: z.string().min(1).transform(s => s.trim()), // accept any label, we normalize later
+  extracted_numbers: z.record(z.number()).default({}),
+  bullets: z.array(z.string()).default([]),
+}).passthrough() // Allow extra fields for demo mode (caseId, use_llm, analyzer_json)
 
 export const ScoreResponseResponseSchema = z.object({
   scores: z.object({

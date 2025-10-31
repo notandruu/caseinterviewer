@@ -27,6 +27,31 @@ import type {
 // v2 imports
 import { runScorer } from '@/lib/agents/scorer'
 import { getCaseStateFromDB, persistScorerTurn } from '@/lib/supabase/queries'
+import { matchSectionFlexible, listSectionCandidates } from '@/lib/compose/sections'
+
+// Canonical aliases to map human-friendly names to internal section keys
+const SECTION_ALIASES: Record<string, string> = {
+  'case opening': 'opening',
+  'opening': 'opening',
+  'intro': 'opening',
+  'introduction': 'opening',
+  'framework': 'framework',
+  'analysis': 'analysis',
+  'synthesis': 'synthesis',
+  'final recommendation': 'final recommendation',
+  // math variants seen in cases
+  'math': 'math',
+  'math_schools': 'math_schools',
+  'math: number of schools': 'math_schools',
+  'math_market_value': 'math_market_value',
+  'math: market value': 'math_market_value',
+}
+
+function normalizeIncomingSection(input: string | null | undefined): string | null {
+  if (!input) return null
+  const s = String(input).trim().toLowerCase()
+  return SECTION_ALIASES[s] ?? s
+}
 
 /**
  * Score quantitative accuracy
@@ -230,9 +255,21 @@ function scoreSanityChecks(
   return { score, comments }
 }
 
+function devError(err: unknown): string {
+  if (process.env.NODE_ENV !== 'production' && err instanceof Error) {
+    return `Dev error: ${err.message}`;
+  }
+  return 'Internal server error';
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
+
+    // Prefer the client's provided section value and normalize it to a canonical key
+    const incomingSectionRaw = body?.section as string | undefined
+    const incomingSection = normalizeIncomingSection(incomingSectionRaw)
+    // Do NOT overwrite body.section — prefer what the client explicitly sent
 
     // Optional LLM path
     const use_llm = !!body?.use_llm
@@ -249,7 +286,7 @@ export async function POST(request: NextRequest) {
 
     if (use_llm) {
       // LLM path requires attemptId, section, analyzer_json
-      if (!attemptId || !section || !analyzer_json) {
+  if (!attemptId || !incomingSection || !analyzer_json) {
         return NextResponse.json(
           { error: 'attemptId, section, and analyzer_json required when use_llm is true' },
           { status: 400 }
@@ -292,12 +329,20 @@ export async function POST(request: NextRequest) {
       if (caseError || !caseData) return NextResponse.json({ error: 'Case not found' }, { status: 404 })
 
       const sections = caseData.sections as CaseSection[]
-      const targetSection = sections.find((s) => s.name === section)
-      if (!targetSection) return NextResponse.json({ error: 'Section not found' }, { status: 404 })
+      const sectionsSource = Array.isArray(sections) && sections.length > 0 ? sections : []
+      const found = matchSectionFlexible(sectionsSource, incomingSection || '')
+      if (!found) {
+        const { keys } = listSectionCandidates(sectionsSource)
+        const msg = process.env.NODE_ENV !== 'production'
+          ? `Section not found: "${incomingSectionRaw ?? incomingSection}". Available: [${keys.join(', ')}]`
+          : 'Section not found'
+        return NextResponse.json({ error: msg }, { status: 404 })
+      }
 
       // Build minimal CaseState and call Scorer
       const baseState = await getCaseStateFromDB(attemptId)
-      const state = { ...baseState, currentSection: section, rubric: normalizeRubricForScorer(targetSection) }
+      const targetSection = found.raw as CaseSection
+  const state = { ...baseState, currentSection: incomingSection, rubric: normalizeRubricForScorer(targetSection) }
 
       const { json: scorerJson, usage, rawText } = await runScorer(state as any, analyzer_json)
 
@@ -331,8 +376,8 @@ export async function POST(request: NextRequest) {
       }
 
       if (!isDemoAttempt) {
-        const existingScores = (body as any)._existingScores || {}
-        const updatedScores: RubricScores = { ...existingScores, [section]: sectionScore }
+  const existingScores = (body as any)._existingScores || {}
+  const updatedScores: RubricScores = { ...existingScores, [incomingSection ?? 'unknown']: sectionScore }
 
         await supabase
           .from('case_attempts')
@@ -342,7 +387,7 @@ export async function POST(request: NextRequest) {
         await supabase.from('case_events').insert({
           attempt_id: attemptId,
           event_type: 'response_scored_llm',
-          payload: { section, scorer_json: scorerJson },
+          payload: { section: incomingSection ?? 'unknown', scorer_json: scorerJson },
         })
       }
 
@@ -362,7 +407,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Fallback to original heuristic path
-    const validation = validateApiRequest(ScoreResponseRequestSchema, body)
+  const validation = validateApiRequest(ScoreResponseRequestSchema, { ...body, section: incomingSection })
     if (!validation.success) {
       return NextResponse.json(
         { error: 'Invalid request', details: validation.error.errors },
@@ -408,7 +453,7 @@ export async function POST(request: NextRequest) {
 
     const { data: caseData, error: caseError } = await supabase
       .from('cases')
-      .select('sections, ground_truth')
+      .select('sections, ground_truth, vars')
       .eq('id', resolvedCaseId)
       .single()
 
@@ -417,94 +462,143 @@ export async function POST(request: NextRequest) {
     }
 
     const sections = caseData.sections as CaseSection[]
-    const targetSection = sections.find((s) => s.name === vSection)
-
-    if (!targetSection) {
-      return NextResponse.json({ error: 'Section not found' }, { status: 404 })
+    const sectionsSource = Array.isArray(sections) && sections.length > 0 ? sections : []
+    const found = matchSectionFlexible(sectionsSource, vSection)
+    if (!found) {
+      const { keys } = listSectionCandidates(sectionsSource)
+      const msg = process.env.NODE_ENV !== 'production'
+        ? `Section not found: "${vSection}". Available: [${keys.join(', ')}]`
+        : 'Section not found'
+      return NextResponse.json({ error: msg }, { status: 404 })
     }
+    const targetSection = found.raw as CaseSection
 
-    const rubric = targetSection.rubric
-    const groundTruth = caseData.ground_truth as GroundTruth | null
+    // safe defaults if section.rubric is absent
+    type Rubric = {
+      criteria: { dimension: string; weight: number }[];
+      passing_score: number;
+    };
 
-    const quantResult = scoreQuantitative(extracted_numbers, groundTruth)
-    const frameworkResult = scoreFramework(bullets, groundTruth)
-    const insightResult = scoreInsights(bullets)
-    const commResult = scoreCommunication(bullets)
-    const sanityResult = scoreSanityChecks(extracted_numbers)
+    const defaultRubric: Rubric = {
+      criteria: [
+        { dimension: "quantitative", weight: 0.4 },
+        { dimension: "framework", weight: 0.2 },
+        { dimension: "insight", weight: 0.2 },
+        { dimension: "communication", weight: 0.2 },
+      ],
+      passing_score: 60,
+    };
 
-    const scores: Record<string, number> = {
-      quantitative: quantResult.score,
-      framework: frameworkResult.score,
-      insight: insightResult.score,
-      communication: commResult.score,
-      sanity_checks: sanityResult.score,
-    }
+    // prefer section rubric, then any case-level rubric inside ground_truth, else default
+    const rubric: Rubric =
+      (targetSection && (targetSection as any).rubric) ||
+      ((caseData.ground_truth as any)?.rubric as Rubric) ||
+      defaultRubric;
 
-    const allComments = [
-      ...quantResult.comments,
-      ...frameworkResult.comments,
-      ...insightResult.comments,
-      ...commResult.comments,
-      ...sanityResult.comments,
-    ]
+    const groundTruth = (caseData.ground_truth as any) ?? null;
+    const expectedCalcs = groundTruth?.calculations ?? null;
 
-    let weightedScore = 0
-    let totalWeight = 0
+    const quantResult = scoreQuantitative(extracted_numbers || {}, expectedCalcs ? { calculations: expectedCalcs } as GroundTruth : null)
+    const frameworkResult = scoreFramework(bullets || [], groundTruth)
+    const insightResult = scoreInsights(bullets || [])
+    const commResult = scoreCommunication(bullets || [])
+    const sanityResult = scoreSanityChecks(extracted_numbers || {})
 
-    for (const criterion of rubric.criteria) {
-      const dimScore = scores[criterion.dimension] || scores.quantitative || 70
-      weightedScore += dimScore * criterion.weight
-      totalWeight += criterion.weight
-    }
+    // Calculate dimension scores and aggregate comments
+    const dimensionResults = {
+      quantitative: quantResult,
+      framework: frameworkResult,
+      insight: insightResult,
+      communication: commResult,
+      sanity_checks: sanityResult,
+    };
 
-    const finalScore = totalWeight > 0 ? weightedScore / totalWeight : 70
-    const sectionPassed = finalScore >= rubric.passing_score
+    const dimensionScores = Object.entries(dimensionResults).reduce(
+      (acc, [key, result]) => ({ ...acc, [key]: result.score }),
+      {} as Record<string, number>
+    );
+
+    const allComments = Object.values(dimensionResults).flatMap(r => r.comments);
+
+    // Calculate weighted final score using rubric criteria
+    const { weightedTotal, totalWeight } = rubric.criteria.reduce(
+      (acc, criterion) => {
+        const dimScore = dimensionScores[criterion.dimension] || dimensionScores.quantitative || 70;
+        return {
+          weightedTotal: acc.weightedTotal + (dimScore * criterion.weight),
+          totalWeight: acc.totalWeight + criterion.weight,
+        };
+      },
+      { weightedTotal: 0, totalWeight: 0 }
+    );
+
+    const finalScore = totalWeight > 0 ? weightedTotal / totalWeight : 70;
+    const sectionPassed = finalScore >= (rubric.passing_score ?? defaultRubric.passing_score);
 
     const sectionScore: SectionScore = {
-      scores,
+      scores: dimensionScores,
       comments: allComments,
       section_passed: sectionPassed,
       scored_at: new Date().toISOString(),
-    }
+    };
 
     if (!vAttemptId.startsWith('demo-')) {
-      const existingScores = (body as any)._existingScores || {}
+      const existingScores = (body as any)._existingScores || {};
       const updatedScores: RubricScores = {
         ...existingScores,
         [vSection]: sectionScore,
+      };
+
+      // Only update attempt if scored
+      try {
+        const updates: any = { rubric_scores: updatedScores };
+        
+        // Try to advance section if passed
+        if (sectionPassed && Array.isArray(sections)) {
+          const sectionOrder = sections.map(s => s.name);
+          const currentIdx = sectionOrder.findIndex(s => s === found?.raw?.name);
+          if (currentIdx >= 0 && currentIdx < sectionOrder.length - 1) {
+            updates.current_section = sectionOrder[currentIdx + 1];
+          }
+        }
+
+        await supabase
+          .from('case_attempts')
+          .update(updates)
+          .eq('id', vAttemptId);
+
+        await supabase.from('case_events').insert({
+          attempt_id: vAttemptId,
+          event_type: 'response_scored',
+          payload: {
+            section: vSection,
+            scores: dimensionScores,
+            comments: allComments,
+            section_passed: sectionPassed,
+            extracted_numbers: extracted_numbers || {},
+            bullets: bullets || [],
+            next_section: updates.current_section,
+          },
+        });
+      } catch (updateError) {
+        // Log but continue - don't fail the response if DB updates fail
+        console.warn('[score-response] Failed to update attempt/events:', updateError);
       }
-
-      await supabase
-        .from('case_attempts')
-        .update({ rubric_scores: updatedScores })
-        .eq('id', vAttemptId)
-
-      await supabase.from('case_events').insert({
-        attempt_id: vAttemptId,
-        event_type: 'response_scored',
-        payload: {
-          section: vSection,
-          scores,
-          comments: allComments,
-          section_passed: sectionPassed,
-          extracted_numbers,
-          bullets,
-        },
-      })
     }
 
-    return NextResponse.json({
-      scores,
+    const response = {
+      scores: dimensionScores,
       comments: allComments,
       section_passed: sectionPassed,
       final_score: Math.round(finalScore),
-    })
-  } catch (error) {
-    console.error('[score-response] Error:', error)
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
+      passing_score: rubric.passing_score ?? defaultRubric.passing_score,
+    };
+
+    return NextResponse.json(response);
+
+  } catch (error: any) {
+    console.error('[score-response] Error:', error);
+    return NextResponse.json({ error: devError(error) }, { status: 500 });
   }
 }
 

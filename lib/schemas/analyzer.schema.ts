@@ -1,44 +1,63 @@
 export const AnalyzerSchema = {
-  $schema: "http://json-schema.org/draft-07/schema#",
-  title: "Analyzer",
-  type: "object",
+  $schema: 'http://json-schema.org/draft-07/schema#',
+  title: 'AnalyzerSchema',
+  type: 'object',
   additionalProperties: false,
   properties: {
-    notes_bullets: { type: "array", items: { type: "string" }, maxItems: 10 },
-    facts_public: { type: "array", items: { type: "string" }, maxItems: 10 },
-    risks: { type: "array", items: { type: "string" }, maxItems: 5 },
-    math: {
-      type: "object",
-      additionalProperties: false,
-      properties: {
-        assumptions: { type: "array", items: { type: "string" }, maxItems: 5 },
-        result: { type: "string" },
-      },
-      // Strict requires listing all keys in properties
-      required: ["assumptions", "result"],
+    strengths: {
+      type: 'array',
+      items: { type: 'string' },
+      maxItems: 5,
+      description: "Key positive points from the candidate's response",
     },
-    followups: { type: "array", items: { type: "string" }, maxItems: 3 },
-    section_readiness: {
-      type: "string",
-      enum: ["continue", "ask_more", "ready_to_score"],
+    red_flags: {
+      type: 'array',
+      items: { type: 'string' },
+      maxItems: 5,
+      description: 'Areas of concern in the response',
+    },
+    math_steps: {
+      type: 'array',
+      items: { type: 'string' },
+      maxItems: 10,
+      description: 'Mathematical calculations performed by the candidate',
+    },
+    estimates: {
+      type: 'object',
+      additionalProperties: { type: 'number' },
+      description: 'Estimated values provided by the candidate',
+    },
+    readiness: {
+      type: 'string',
+      enum: ['needs_clarification', 'good_to_progress', 'incomplete_data'],
+      description: 'Assessment of whether the response is ready to move forward',
+    },
+    nudge: {
+      type: 'string',
+      maxLength: 60,
+      description: 'Optional guidance prompt if clarification needed',
+    },
+    section_end: {
+      type: 'boolean',
+      description: 'Whether this is a natural endpoint for the section',
     },
   },
-  // Strict requires all top-level keys listed here
   required: [
-    "notes_bullets",
-    "facts_public",
-    "risks",
-    "math",
-    "followups",
-    "section_readiness",
+    'strengths',
+    'red_flags',
+    'math_steps',
+    'estimates',
+    'readiness',
+    'section_end',
   ],
 } as const;
 
 export type AnalyzerJSON = {
-  notes_bullets: string[];
-  facts_public: string[];
-  risks: string[];
-  math: { assumptions: string[]; result: string };
-  followups: string[];
-  section_readiness: "continue" | "ask_more" | "ready_to_score";
+  strengths: string[];
+  red_flags: string[];
+  math_steps: string[];
+  estimates: Record<string, number>;
+  readiness: 'needs_clarification' | 'good_to_progress' | 'incomplete_data';
+  nudge?: string;
+  section_end: boolean;
 };

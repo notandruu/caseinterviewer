@@ -103,13 +103,18 @@ export async function persistAnalyzerTurn(params: {
   answer: string;
   analyzer_json: unknown;
   usage?: { input_tokens?: number; output_tokens?: number; prompt_tokens?: number; completion_tokens?: number };
+  latency_ms?: number;
+  idempotency_key?: string;
+  stage?: string;
 }) {
   await appendTurn(params.attemptId, {
-    stage: "analyzer",
+    stage: params.stage || "analyzer",
     answer_text: params.answer,
     analyzer_json: params.analyzer_json,
     tokens_in: params.usage?.input_tokens ?? params.usage?.prompt_tokens ?? null,
     tokens_out: params.usage?.output_tokens ?? params.usage?.completion_tokens ?? null,
+    latency_ms: params.latency_ms,
+    idempotency_key: params.idempotency_key,
   });
 }
 

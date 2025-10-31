@@ -38,7 +38,9 @@ export async function callJSON<T>(
   system: string,
   userBlocks: string[],
   schema: Record<string, any>,
-  model = DEFAULT_JSON_MODEL
+  model = DEFAULT_JSON_MODEL,
+  temperature = 0.2,
+  max_output_tokens = 256
 ): Promise<JSONCallResult<T>> {
   const response = await client.responses.create({
     model,
@@ -50,10 +52,12 @@ export async function callJSON<T>(
       format: {
         type: "json_schema",
         name: schema.title ?? "Schema",
-        schema,              // your JSON Schema object
+        schema,
         strict: true,
       },
     },
+    temperature,
+    max_output_tokens,
   });
 
   const rawText = extractText(response);
