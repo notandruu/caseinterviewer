@@ -4,6 +4,11 @@
  * Evaluates user's response against section rubric
  * Compares extracted numbers against ground truth
  * Updates attempt's rubric scores and logs event
+ *
+ * v2 addition:
+ * - Optional LLM scoring path using Scorer agent when body.use_llm === true
+ *   and body.analyzer_json is provided. Falls back to original heuristics
+ *   otherwise. Response shape stays the same.
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -19,6 +24,10 @@ import type {
   SectionScore,
 } from '@/types/cases'
 
+// v2 imports
+import { runScorer } from '@/lib/agents/scorer'
+import { getCaseStateFromDB, persistScorerTurn } from '@/lib/supabase/queries'
+
 /**
  * Score quantitative accuracy
  * Compares extracted numbers against ground truth
@@ -29,12 +38,11 @@ function scoreQuantitative(
 ): { score: number; comments: string[] } {
   const comments: string[] = []
 
-  if (!groundTruth || !groundTruth.calculations) {
-    // No ground truth available, skip quantitative scoring
+  if (!groundTruth || !ground_truth_has_calcs(groundTruth)) {
     return { score: 100, comments: ['No quantitative benchmark available'] }
   }
 
-  const expectedCalcs = groundTruth.calculations
+  const expectedCalcs = groundTruth.calculations!
   const expectedKeys = Object.keys(expectedCalcs)
 
   if (expectedKeys.length === 0) {
@@ -53,21 +61,22 @@ function scoreQuantitative(
       continue
     }
 
-    // Allow 5% tolerance for rounding
     const tolerance = Math.abs(expected * 0.05)
     const diff = Math.abs(actual - expected)
 
     if (diff <= tolerance) {
       correctCount++
     } else {
-      comments.push(
-        `${key}: Expected ${expected}, got ${actual} (${Math.round(diff / expected * 100)}% off)`
-      )
+      const pct = expected !== 0 ? Math.round((diff / expected) * 100) : 0
+      comments.push(`${key}: Expected ${expected}, got ${actual} (${pct}% off)`)
     }
   }
 
   const score = (correctCount / totalCount) * 100
   return { score, comments }
+}
+function ground_truth_has_calcs(gt: GroundTruth | null): gt is GroundTruth & { calculations: Record<string, number> } {
+  return !!gt && !!(gt as any).calculations && typeof (gt as any).calculations === 'object'
 }
 
 /**
@@ -80,8 +89,7 @@ function scoreFramework(
 ): { score: number; comments: string[] } {
   const comments: string[] = []
 
-  if (!groundTruth || !groundTruth.framework_components) {
-    // Basic quality check
+  if (!groundTruth || !Array.isArray((groundTruth as any).framework_components)) {
     if (bullets.length < 2) {
       comments.push('Framework lacks depth (fewer than 2 components)')
       return { score: 60, comments }
@@ -89,7 +97,7 @@ function scoreFramework(
     return { score: 80, comments: ['Framework appears structured'] }
   }
 
-  const expectedComponents = groundTruth.framework_components
+  const expectedComponents = (groundTruth as any).framework_components as string[]
   const bulletsText = bullets.join(' ').toLowerCase()
   let foundCount = 0
 
@@ -111,11 +119,6 @@ function scoreFramework(
  */
 function scoreInsights(bullets: string[]): { score: number; comments: string[] } {
   const comments: string[] = []
-
-  // Heuristics:
-  // - At least 2 bullets
-  // - Each bullet should be substantive (> 20 chars)
-  // - Look for causal language (because, therefore, due to, etc.)
 
   if (bullets.length < 2) {
     comments.push('Insufficient insights provided (need at least 2)')
@@ -158,18 +161,12 @@ function scoreInsights(bullets: string[]): { score: number; comments: string[] }
 function scoreCommunication(bullets: string[]): { score: number; comments: string[] } {
   const comments: string[] = []
 
-  // Heuristics:
-  // - Clear structure (bullet points provided)
-  // - Reasonable length (not too short, not too verbose)
-  // - Avoids jargon overload
-
-  let score = 70 // Base score for providing structured bullets
+  let score = 70
 
   if (bullets.length === 0) {
     return { score: 0, comments: ['No structured response provided'] }
   }
 
-  // Check average bullet length
   const avgLength = bullets.reduce((sum, b) => sum + b.length, 0) / bullets.length
 
   if (avgLength < 15) {
@@ -179,10 +176,9 @@ function scoreCommunication(bullets: string[]): { score: number; comments: strin
     comments.push('Bullets are verbose, be more concise')
     score -= 10
   } else {
-    score += 20 // Good length
+    score += 20
   }
 
-  // Check for structure words
   const structureWords = ['first', 'second', 'third', 'finally', 'additionally', 'moreover']
   const hasStructure = bullets.some((b) =>
     structureWords.some((w) => b.toLowerCase().includes(w))
@@ -204,7 +200,6 @@ function scoreSanityChecks(
   const comments: string[] = []
   let issues = 0
 
-  // Check for obviously wrong values
   for (const [key, value] of Object.entries(extractedNumbers)) {
     if (!isFinite(value)) {
       issues++
@@ -216,7 +211,6 @@ function scoreSanityChecks(
     }
   }
 
-  // Check for profit = revenue - cost if all present
   const revenue = extractedNumbers.revenue || extractedNumbers.revenue_per_flight
   const cost = extractedNumbers.cost || extractedNumbers.cost_per_flight || extractedNumbers.operating_cost
   const profit = extractedNumbers.profit || extractedNumbers.profit_per_flight
@@ -231,19 +225,144 @@ function scoreSanityChecks(
   }
 
   const score = issues === 0 ? 100 : Math.max(0, 100 - issues * 30)
-  if (issues === 0) {
-    comments.push('All sanity checks passed')
-  }
+  if (issues === 0) comments.push('All sanity checks passed')
 
   return { score, comments }
 }
 
 export async function POST(request: NextRequest) {
   try {
-    // Parse and validate request body
     const body = await request.json()
-    const validation = validateApiRequest(ScoreResponseRequestSchema, body)
 
+    // Optional LLM path
+    const use_llm = !!body?.use_llm
+    const analyzer_json = body?.analyzer_json
+    const attemptId = body?.attemptId as string | undefined
+    const section = body?.section as string | undefined
+
+    // Initialize Supabase
+    const supabase = await createClient()
+
+    // Demo detection
+    const isDemoAttempt = !!attemptId && attemptId.startsWith('demo-')
+    let caseId: string
+
+    if (use_llm) {
+      // LLM path requires attemptId, section, analyzer_json
+      if (!attemptId || !section || !analyzer_json) {
+        return NextResponse.json(
+          { error: 'attemptId, section, and analyzer_json required when use_llm is true' },
+          { status: 400 }
+        )
+      }
+
+      if (isDemoAttempt) {
+        const demoCaseId = body?.caseId as string | undefined
+        if (!demoCaseId) {
+          return NextResponse.json({ error: 'caseId required for demo mode' }, { status: 400 })
+        }
+        caseId = demoCaseId
+      } else {
+        const {
+          data: { user },
+          error: authError,
+        } = await supabase.auth.getUser()
+        if (authError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+        const { data: attempt, error: attemptError } = await supabase
+          .from('case_attempts')
+          .select('user_id, case_id, rubric_scores')
+          .eq('id', attemptId)
+          .single()
+
+        if (attemptError || !attempt) return NextResponse.json({ error: 'Attempt not found' }, { status: 404 })
+        if (attempt.user_id !== user.id) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+
+        caseId = attempt.case_id
+        ;(body as any)._existingScores = (attempt as any).rubric_scores || {}
+      }
+
+      // Fetch case rubric and section
+      const { data: caseData, error: caseError } = await supabase
+        .from('cases')
+        .select('sections')
+        .eq('id', caseId)
+        .single()
+
+      if (caseError || !caseData) return NextResponse.json({ error: 'Case not found' }, { status: 404 })
+
+      const sections = caseData.sections as CaseSection[]
+      const targetSection = sections.find((s) => s.name === section)
+      if (!targetSection) return NextResponse.json({ error: 'Section not found' }, { status: 404 })
+
+      // Build minimal CaseState and call Scorer
+      const baseState = await getCaseStateFromDB(attemptId)
+      const state = { ...baseState, currentSection: section, rubric: normalizeRubricForScorer(targetSection) }
+
+      const { json: scorerJson, usage, rawText } = await runScorer(state as any, analyzer_json)
+
+      if (!scorerJson) {
+        await persistScorerTurn({
+          attemptId,
+          scorer_json: rawText || 'invalid-json',
+          usage,
+        })
+        return NextResponse.json({ error: 'Invalid scorer JSON' }, { status: 502 })
+      }
+
+      // Map Scorer buckets (0..5) to 0..100 per dimension for compatibility
+      const mappedScores: Record<string, number> = {}
+      const comments: string[] = []
+      for (const b of scorerJson.buckets) {
+        mappedScores[b.name] = Math.max(0, Math.min(100, b.score * 20))
+        if (b.rationale && b.rationale.trim().length > 0) comments.push(`${b.name}: ${b.rationale}`)
+      }
+
+      const finalScore = Math.max(0, Math.min(100, scorerJson.total))
+      const passing = typeof (targetSection as any).rubric?.passing_score === 'number'
+        ? finalScore >= (targetSection as any).rubric.passing_score
+        : finalScore >= 70
+
+      const sectionScore: SectionScore = {
+        scores: mappedScores,
+        comments,
+        section_passed: passing,
+        scored_at: new Date().toISOString(),
+      }
+
+      if (!isDemoAttempt) {
+        const existingScores = (body as any)._existingScores || {}
+        const updatedScores: RubricScores = { ...existingScores, [section]: sectionScore }
+
+        await supabase
+          .from('case_attempts')
+          .update({ rubric_scores: updatedScores })
+          .eq('id', attemptId)
+
+        await supabase.from('case_events').insert({
+          attempt_id: attemptId,
+          event_type: 'response_scored_llm',
+          payload: { section, scorer_json: scorerJson },
+        })
+      }
+
+      await persistScorerTurn({
+        attemptId,
+        scorer_json: scorerJson,
+        usage,
+      })
+
+      return NextResponse.json({
+        scores: mappedScores,
+        comments,
+        section_passed: passing,
+        final_score: Math.round(finalScore),
+        via: 'llm',
+      })
+    }
+
+    // Fallback to original heuristic path
+    const validation = validateApiRequest(ScoreResponseRequestSchema, body)
     if (!validation.success) {
       return NextResponse.json(
         { error: 'Invalid request', details: validation.error.errors },
@@ -251,28 +370,16 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const { attemptId, section, extracted_numbers, bullets } = validation.data
+    const { attemptId: vAttemptId, section: vSection, extracted_numbers, bullets } = validation.data
 
-    // Initialize Supabase client
-    const supabase = await createClient()
-
-    // Check if this is a demo attempt
-    const isDemoAttempt = attemptId.startsWith('demo-')
-
-    let caseId: string
-
-    if (isDemoAttempt) {
-      // Demo mode: Get case ID from request body
+    let resolvedCaseId: string
+    if (vAttemptId.startsWith('demo-')) {
       const demoBody = body as any
       if (!demoBody.caseId) {
-        return NextResponse.json(
-          { error: 'caseId required for demo mode' },
-          { status: 400 }
-        )
+        return NextResponse.json({ error: 'caseId required for demo mode' }, { status: 400 })
       }
-      caseId = demoBody.caseId
+      resolvedCaseId = demoBody.caseId
     } else {
-      // Regular authenticated flow
       const {
         data: { user },
         error: authError,
@@ -282,43 +389,35 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
       }
 
-      // Fetch attempt and verify ownership
       const { data: attempt, error: attemptError } = await supabase
         .from('case_attempts')
         .select('user_id, case_id, rubric_scores')
-        .eq('id', attemptId)
+        .eq('id', vAttemptId)
         .single()
 
       if (attemptError || !attempt) {
         return NextResponse.json({ error: 'Attempt not found' }, { status: 404 })
       }
-
       if (attempt.user_id !== user.id) {
         return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
       }
 
-      caseId = attempt.case_id
-
-      // Update attempt's rubric_scores (only for authenticated users)
-      const existingScores = (attempt.rubric_scores as RubricScores) || {}
-      // Store for later use
-      ;(body as any)._existingScores = existingScores
+      resolvedCaseId = attempt.case_id
+      ;(body as any)._existingScores = (attempt as any).rubric_scores || {}
     }
 
-    // Fetch case to get ground truth and rubric
     const { data: caseData, error: caseError } = await supabase
       .from('cases')
       .select('sections, ground_truth')
-      .eq('id', caseId)
+      .eq('id', resolvedCaseId)
       .single()
 
     if (caseError || !caseData) {
       return NextResponse.json({ error: 'Case not found' }, { status: 404 })
     }
 
-    // Find section rubric
     const sections = caseData.sections as CaseSection[]
-    const targetSection = sections.find((s) => s.name === section)
+    const targetSection = sections.find((s) => s.name === vSection)
 
     if (!targetSection) {
       return NextResponse.json({ error: 'Section not found' }, { status: 404 })
@@ -327,14 +426,12 @@ export async function POST(request: NextRequest) {
     const rubric = targetSection.rubric
     const groundTruth = caseData.ground_truth as GroundTruth | null
 
-    // Score each dimension
     const quantResult = scoreQuantitative(extracted_numbers, groundTruth)
     const frameworkResult = scoreFramework(bullets, groundTruth)
     const insightResult = scoreInsights(bullets)
     const commResult = scoreCommunication(bullets)
     const sanityResult = scoreSanityChecks(extracted_numbers)
 
-    // Compute weighted score based on rubric criteria
     const scores: Record<string, number> = {
       quantitative: quantResult.score,
       framework: frameworkResult.score,
@@ -343,7 +440,6 @@ export async function POST(request: NextRequest) {
       sanity_checks: sanityResult.score,
     }
 
-    // Combine all comments
     const allComments = [
       ...quantResult.comments,
       ...frameworkResult.comments,
@@ -352,7 +448,6 @@ export async function POST(request: NextRequest) {
       ...sanityResult.comments,
     ]
 
-    // Calculate section score based on rubric weights
     let weightedScore = 0
     let totalWeight = 0
 
@@ -365,7 +460,6 @@ export async function POST(request: NextRequest) {
     const finalScore = totalWeight > 0 ? weightedScore / totalWeight : 70
     const sectionPassed = finalScore >= rubric.passing_score
 
-    // Create section score object
     const sectionScore: SectionScore = {
       scores,
       comments: allComments,
@@ -373,26 +467,23 @@ export async function POST(request: NextRequest) {
       scored_at: new Date().toISOString(),
     }
 
-    // Update database only for non-demo attempts
-    if (!isDemoAttempt) {
-      // Update attempt's rubric_scores
+    if (!vAttemptId.startsWith('demo-')) {
       const existingScores = (body as any)._existingScores || {}
       const updatedScores: RubricScores = {
         ...existingScores,
-        [section]: sectionScore,
+        [vSection]: sectionScore,
       }
 
       await supabase
         .from('case_attempts')
         .update({ rubric_scores: updatedScores })
-        .eq('id', attemptId)
+        .eq('id', vAttemptId)
 
-      // Log event
       await supabase.from('case_events').insert({
-        attempt_id: attemptId,
+        attempt_id: vAttemptId,
         event_type: 'response_scored',
         payload: {
-          section,
+          section: vSection,
           scores,
           comments: allComments,
           section_passed: sectionPassed,
@@ -426,4 +517,17 @@ export async function OPTIONS(request: NextRequest) {
       'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     },
   })
+}
+
+/** Convert your section rubric to the simple Scorer rubric shape */
+function normalizeRubricForScorer(section: CaseSection) {
+  // Expecting section.rubric.criteria: [{ dimension, weight }, ...]
+  // Map to categories with names and weights
+  const criteria = (section as any).rubric?.criteria ?? []
+  const cats = criteria.map((c: any) => ({
+    name: String(c.dimension || 'dimension'),
+    weight: Number(c.weight || 1),
+    desc: '',
+  }))
+  return { categories: cats }
 }
