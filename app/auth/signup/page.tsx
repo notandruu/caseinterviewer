@@ -6,6 +6,8 @@ import { EchoSignIn, useEcho } from '@merit-systems/echo-react-sdk'
 import { ArrowLeft } from 'lucide-react'
 import Image from "next/image"
 
+export const dynamic = 'force-dynamic'
+
 export default function SignUpPage() {
   const router = useRouter()
   const { isLoggedIn, isLoading } = useEcho()
