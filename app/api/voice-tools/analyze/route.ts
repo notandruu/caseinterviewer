@@ -3,6 +3,7 @@ export const runtime = "nodejs";
 import { NextRequest, NextResponse } from "next/server";
 import { performance } from "node:perf_hooks";
 import { getCaseStateFromDB, persistAnalyzerTurn } from "@/lib/supabase/queries";
+import { resolveCaseStyle } from "@/lib/compose/style";
 import { runAnalyzer } from "@/lib/agents/analyzer";
 import { decideNext } from "@/lib/agents/director";
 import type { CaseState } from "@/lib/compose/state";
@@ -25,6 +26,10 @@ export async function POST(req: NextRequest) {
       if (!caseId) {
         return NextResponse.json({ error: "caseId required in demo mode" }, { status: 400 });
       }
+      const demoVarsStyle = (body?.vars as any)?.interview_style ?? null;
+      const demoFirm = body?.firm ?? null;
+      const demoCaseStyle = resolveCaseStyle({ override: body?.style ?? null, varsStyle: demoVarsStyle, firm: demoFirm });
+
       state = {
         attemptId: attemptId ?? "demo-local",
         caseId,
@@ -34,6 +39,7 @@ export async function POST(req: NextRequest) {
         last_question: null,
         snippet: body?.snippet ?? null,
         rubric: body?.rubric ?? null,
+        caseStyle: demoCaseStyle,
       };
     } else {
       if (!attemptId) {

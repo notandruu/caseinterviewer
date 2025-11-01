@@ -3,6 +3,7 @@ export const runtime = "nodejs";
 import { NextRequest, NextResponse } from "next/server";
 import { performance } from "node:perf_hooks";
 import { getCaseStateFromDB, persistInterviewerTurn } from "@/lib/supabase/queries";
+import { resolveCaseStyle } from "@/lib/compose/style";
 import { runInterviewer } from "@/lib/agents/interviewer";
 import type { CaseState } from "@/lib/compose/state";
 
@@ -13,8 +14,8 @@ export async function POST(req: NextRequest) {
     const attemptId: string | undefined = body?.attemptId;
     const isDemo = body?.demo === true || (attemptId && attemptId.startsWith("demo-"));
     
-    // Get optional nudge and enforce max length
-    const nudge = body?.nudge ? `Quick check: ${body.nudge}`.slice(0, 60) : undefined;
+  // Get optional raw nudge text (limit) - runInterviewer will prefix it
+  const rawNudge = body?.nudge ? String(body.nudge).slice(0, 60) : undefined;
 
     let state: CaseState;
 
@@ -23,6 +24,10 @@ export async function POST(req: NextRequest) {
       if (!caseId) {
         return NextResponse.json({ error: "caseId required in demo mode" }, { status: 400 });
       }
+      const demoVarsStyle = (body?.vars as any)?.interview_style ?? null;
+      const demoFirm = body?.firm ?? null;
+      const demoCaseStyle = resolveCaseStyle({ override: body?.style ?? null, varsStyle: demoVarsStyle, firm: demoFirm });
+
       state = {
         attemptId: attemptId ?? "demo-local",
         caseId,
@@ -32,6 +37,7 @@ export async function POST(req: NextRequest) {
         last_question: null,
         snippet: body?.snippet ?? null,
         rubric: body?.rubric ?? null,
+        caseStyle: demoCaseStyle,
       };
     } else {
       if (!attemptId) {
@@ -40,7 +46,12 @@ export async function POST(req: NextRequest) {
       state = await getCaseStateFromDB(attemptId);
     }
 
-    const { json, usage, rawText } = await runInterviewer(state, undefined, nudge);
+    // If caller provided an override style in non-demo mode, apply it
+    if (!isDemo && body?.style) {
+      (state as any).caseStyle = resolveCaseStyle({ override: body.style ?? null });
+    }
+
+    const { json, usage, rawText } = await runInterviewer(state, undefined, rawNudge);
 
     if (!json?.question) {
       // only persist in real mode

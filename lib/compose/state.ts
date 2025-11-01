@@ -1,3 +1,5 @@
+import type { CaseStyle } from "./style";
+
 export type CaseState = {
   attemptId: string;
   caseId: string;
@@ -10,6 +12,7 @@ export type CaseState = {
   rubric?: {
     categories: { name: string; weight: number; desc?: string }[];
   } | null;
+  caseStyle: CaseStyle;
 };
 
 export function buildInterviewerBlocks(s: CaseState, nudge?: string): string[] {
@@ -17,7 +20,7 @@ export function buildInterviewerBlocks(s: CaseState, nudge?: string): string[] {
     `CaseState:
 case_id: ${s.caseId}
 section: ${s.currentSection}
-role: ${s.role ?? "candidate"}
+style: ${s.caseStyle}
 objective: ${s.objective ?? ""}`,
     s.snippet ? `Snippet:\n${s.snippet}` : "Snippet: none",
     s.last_question ? `LastQuestion:\n${s.last_question}` : "LastQuestion: none",

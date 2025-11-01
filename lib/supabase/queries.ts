@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { CaseState } from "@/lib/compose/state";
+import { resolveCaseStyle } from "@/lib/compose/style";
 
 // Helpers to append a JSON turn into case_attempts.turns
 async function appendTurn(
@@ -42,7 +43,7 @@ export async function getCaseStateFromDB(attemptId: string): Promise<CaseState> 
 
   const { data: kase } = await supabase
     .from("cases")
-    .select("id, objective, industry")
+    .select("id, objective, industry, firm, vars")
     .eq("id", attempt.case_id)
     .single();
 
@@ -73,6 +74,10 @@ export async function getCaseStateFromDB(attemptId: string): Promise<CaseState> 
     }
   }
 
+  // Resolve interview style from case vars/family
+  const varsStyle = (kase as any)?.vars ? (kase as any).vars.interview_style ?? null : null;
+  const caseStyle = resolveCaseStyle({ override: undefined, varsStyle, firm: (kase as any)?.firm ?? null });
+
   return {
     attemptId,
     caseId: attempt.case_id,
@@ -82,6 +87,7 @@ export async function getCaseStateFromDB(attemptId: string): Promise<CaseState> 
     last_question: null, // can be derived from last interviewer turn if you want
     snippet,
     rubric,
+    caseStyle,
   };
 }
 
