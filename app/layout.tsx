@@ -24,6 +24,7 @@ export const metadata: Metadata = {
   creator: 'Case Interviewer Inc',
   publisher: 'Case Interviewer Inc',
   metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || 'https://caseinterviewer.com'),
+  themeColor: '#ffffff',
   alternates: {
     canonical: '/',
   },
