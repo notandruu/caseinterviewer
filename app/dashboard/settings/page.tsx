@@ -3,24 +3,18 @@
 import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useEcho } from '@merit-systems/echo-react-sdk'
-import { Target, BarChart3, History, Settings, ArrowLeft, LogOut, User, Bell, Shield } from 'lucide-react'
-import Image from 'next/image'
-import { Button } from '@/components/ui/button'
+import { ArrowLeft, User, Bell, Shield } from 'lucide-react'
+import { DashboardLayout } from '@/components/DashboardLayout'
 
 export default function SettingsPage() {
   const router = useRouter()
-  const { isLoggedIn, user, signOut } = useEcho()
+  const { isLoggedIn, user } = useEcho()
 
   useEffect(() => {
     if (!isLoggedIn) {
       router.push('/auth/login')
     }
   }, [isLoggedIn, router])
-
-  const handleSignOut = async () => {
-    await signOut()
-    router.push('/')
-  }
 
   if (!isLoggedIn) {
     return (
@@ -31,57 +25,8 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="flex min-h-screen bg-white">
-      {/* Left Sidebar */}
-      <aside className="fixed left-0 top-0 h-screen w-16 flex flex-col items-center py-6 gap-8 border-r border-gray-100">
-        {/* Logo */}
-        <button onClick={() => router.push('/dashboard')} className="cursor-pointer">
-          <Image src="/logo.png" alt="Case Interviewer" width={40} height={40} className="w-10 h-10" />
-        </button>
-
-        {/* Nav Icons */}
-        <div className="flex flex-col gap-6 text-gray-400">
-          <button
-            onClick={() => router.push('/dashboard')}
-            className="hover:text-gray-700 transition-colors"
-            title="Cases"
-          >
-            <Target className="h-5 w-5" />
-          </button>
-          <button
-            onClick={() => router.push('/dashboard/analytics')}
-            className="hover:text-gray-700 transition-colors"
-            title="Analytics"
-          >
-            <BarChart3 className="h-5 w-5" />
-          </button>
-          <button
-            onClick={() => router.push('/dashboard/history')}
-            className="hover:text-gray-700 transition-colors"
-            title="History"
-          >
-            <History className="h-5 w-5" />
-          </button>
-          <button
-            onClick={() => router.push('/dashboard/settings')}
-            className="text-[#2196F3] transition-colors"
-            title="Settings"
-          >
-            <Settings className="h-5 w-5" />
-          </button>
-        </div>
-      </aside>
-
-      {/* Main Content */}
-      <main className="ml-16 flex-1 px-8 py-12">
-        {/* Top Right - User Info */}
-        <div className="fixed top-6 right-6 flex items-center gap-4">
-          <div className="h-10 w-10 rounded-full bg-[#2196F3] flex items-center justify-center">
-            <span className="text-white font-semibold text-sm">
-              {user?.email?.[0]?.toUpperCase() || 'U'}
-            </span>
-          </div>
-        </div>
+    <DashboardLayout>
+      <main className="px-4 md:px-8 py-12 mt-16 md:mt-0">
 
         {/* Back Button */}
         <button
@@ -174,25 +119,8 @@ export default function SettingsPage() {
             </div>
           </div>
 
-          {/* Sign Out Section */}
-          <div className="bg-white border border-red-200 rounded-2xl p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="text-lg font-semibold text-gray-900 mb-1">Sign out</h2>
-                <p className="text-sm text-gray-600">Sign out of your account on this device</p>
-              </div>
-              <Button
-                onClick={handleSignOut}
-                variant="destructive"
-                className="bg-red-500 hover:bg-red-600 text-white"
-              >
-                <LogOut className="h-4 w-4 mr-2" />
-                Sign Out
-              </Button>
-            </div>
-          </div>
         </div>
       </main>
-    </div>
+    </DashboardLayout>
   )
 }
