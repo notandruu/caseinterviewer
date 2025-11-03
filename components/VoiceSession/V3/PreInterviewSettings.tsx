@@ -17,6 +17,7 @@ interface PreInterviewSettingsProps {
 export interface InterviewSettings {
   language: string
   voice?: string
+  showTranscription: boolean // Toggle for on-screen text display
 }
 
 const LANGUAGES = [
@@ -31,6 +32,14 @@ const LANGUAGES = [
 
 export function PreInterviewSettings({ caseData, onStart }: PreInterviewSettingsProps) {
   const [selectedLanguage, setSelectedLanguage] = useState('en')
+  const [showTranscription, setShowTranscription] = useState(() => {
+    // Load from localStorage, default to true
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('interview_show_transcription')
+      return saved !== null ? saved === 'true' : true
+    }
+    return true
+  })
   const [micPermission, setMicPermission] = useState<'pending' | 'granted' | 'denied'>('pending')
   const [micLevel, setMicLevel] = useState(0)
   const [isTestingMic, setIsTestingMic] = useState(false)
@@ -88,7 +97,20 @@ export function PreInterviewSettings({ caseData, onStart }: PreInterviewSettings
 
   const handleStart = () => {
     stopMicTest()
-    onStart({ language: selectedLanguage })
+    // Save transcription preference to localStorage
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('interview_show_transcription', String(showTranscription))
+    }
+    onStart({ language: selectedLanguage, showTranscription })
+  }
+
+  const toggleTranscription = () => {
+    const newValue = !showTranscription
+    setShowTranscription(newValue)
+    // Save immediately on toggle
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('interview_show_transcription', String(newValue))
+    }
   }
 
   const canStart = micPermission === 'granted'
@@ -136,6 +158,64 @@ export function PreInterviewSettings({ caseData, onStart }: PreInterviewSettings
                   </span>
                 </button>
               ))}
+            </div>
+          </div>
+
+          {/* Transcription Toggle */}
+          <div className="mb-8">
+            <label className="block text-sm font-semibold text-gray-900 mb-4">
+              Display Mode
+            </label>
+            <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+              <div className="flex items-start justify-between">
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-sm font-medium text-gray-900">
+                      Show On-Screen Transcription
+                    </span>
+                    <span className={`px-2 py-0.5 rounded text-xs font-medium ${showTranscription ? 'bg-green-100 text-green-800' : 'bg-gray-200 text-gray-700'}`}>
+                      {showTranscription ? 'Enabled' : 'Disabled'}
+                    </span>
+                  </div>
+                  <p className="text-xs text-gray-600 leading-relaxed">
+                    {showTranscription
+                      ? "You'll see text as the interviewer speaks. Good for practice."
+                      : "Verbal-only mode: no text displayed. Simulates a real interview where you must listen carefully."}
+                  </p>
+                </div>
+                <button
+                  onClick={toggleTranscription}
+                  className={`
+                    relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent
+                    transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-[#2196F3] focus:ring-offset-2
+                    ${showTranscription ? 'bg-[#2196F3]' : 'bg-gray-300'}
+                  `}
+                  role="switch"
+                  aria-checked={showTranscription}
+                >
+                  <span
+                    className={`
+                      pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0
+                      transition duration-200 ease-in-out
+                      ${showTranscription ? 'translate-x-5' : 'translate-x-0'}
+                    `}
+                  />
+                </button>
+              </div>
+
+              {!showTranscription && (
+                <div className="mt-3 pt-3 border-t border-gray-200">
+                  <div className="flex items-start gap-2">
+                    <svg className="w-4 h-4 text-amber-600 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
+                    <p className="text-xs text-amber-800">
+                      <strong>Challenge Mode:</strong> You'll need to listen carefully and take notes.
+                      This mode is recommended for advanced preparation.
+                    </p>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 

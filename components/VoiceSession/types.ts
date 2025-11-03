@@ -33,6 +33,7 @@ export interface VoiceSessionProps {
   }
   interviewId: string
   userId: string
+  showTranscription?: boolean
 }
 
 export interface TranscriptMessage {

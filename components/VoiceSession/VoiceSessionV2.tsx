@@ -6,6 +6,7 @@ import { Mic } from 'lucide-react'
 import { AgentOrb } from './AgentOrb'
 import { MicVisualizer } from './MicVisualizer'
 import { InterviewTimeline } from './InterviewTimeline'
+import { FrameworkTimer } from './V3/FrameworkTimer'
 import { VoiceSessionProps, TranscriptMessage, CaseStage } from './types'
 import { reducer, INITIAL_STATE } from './state'
 import { getMicStream, createAudioAnalyzer } from '@/lib/audio/analyzer'
@@ -85,7 +86,7 @@ function detectStage(text: string, currentStage: CaseStage, allMessages: Transcr
   return currentStage
 }
 
-export function VoiceSessionV2({ caseData, interviewId, userId }: VoiceSessionProps) {
+export function VoiceSessionV2({ caseData, interviewId, userId, showTranscription: initialShowTranscription = true }: VoiceSessionProps) {
   const [sessionState, dispatch] = useReducer(reducer, INITIAL_STATE)
   const [messages, setMessages] = useState<TranscriptMessage[]>([])
   const [displayedText, setDisplayedText] = useState('')
@@ -93,6 +94,7 @@ export function VoiceSessionV2({ caseData, interviewId, userId }: VoiceSessionPr
   const [ttsEnergy, setTtsEnergy] = useState(0.2)
   const [error, setError] = useState<string | null>(null)
   const [currentStage, setCurrentStage] = useState<CaseStage>('intro')
+  const [showTranscription, setShowTranscription] = useState(initialShowTranscription)
 
   // For word-by-word animation synced with audio
   const fullTranscriptRef = useRef<string>('')
@@ -306,9 +308,24 @@ You are an expert ${caseData.firm || 'consulting'} case interviewer conducting a
 **Summary:** ${caseData.summary || ''}
 
 # Personality & Tone
-Professional, challenging yet supportive, detail-oriented interviewer.
-Formal but friendly. Push for clarity and structured thinking.
-Keep responses concise (2-3 sentences max).
+You are a professional interviewer maintaining high standards.
+
+**Content Guidelines:**
+- Professional, challenging yet supportive, detail-oriented interviewer
+- Formal but friendly. Push for clarity and structured thinking
+- Keep responses concise (2-3 sentences max unless explaining complex data)
+- Guide without giving direct answers
+
+**Voice & Delivery (Critical for Natural Speech):**
+- **Sound human and conversational**: Speak like a real person, not a robot reading a script
+- **Use natural pacing**: Vary your speed — slow down for important points, speed up slightly for transitions
+- **Add subtle vocal variety**: Use slight pitch changes to emphasize key words and maintain engagement
+- **Natural pauses**: Include brief, natural pauses between thoughts (not robotic uniform spacing)
+- **Conversational inflections**: Use upward inflections for questions, downward for statements
+- **Section transitions**: Add warmth during transitions — let your voice signal "we're moving forward together"
+- **Thinking sounds**: Occasional natural sounds like "Mm," "Alright," or brief pauses before responding add realism
+- **Emotional authenticity**: Sound like you're genuinely listening and thinking, not just executing a script
+- **Avoid monotone**: Each sentence should have natural rhythm and flow, like a real conversation
 
 # Structured Interview Flow
 Follow this exact progression through the interview stages:
@@ -347,7 +364,7 @@ ${caseData.key_insights?.map((insight: string, i: number) => `${i + 1}. ${insigh
 Respond only in English. Speak at a natural, professional pace.
 
 Begin by greeting the candidate warmly and then deliver the introduction from Stage 1.`,
-              voice: 'shimmer',
+              voice: 'verse', // Expressive, natural, warm voice for human-like engagement
               turn_detection: {
                 type: 'server_vad',
                 threshold: 0.7,  // Increased from 0.5 to reduce sensitivity to background noise
@@ -723,13 +740,40 @@ Begin by greeting the candidate warmly and then deliver the introduction from St
         </p>
       </div>
 
+      {/* Framework Timer - Only for Hard (4) and Expert (5) difficulty */}
+      <FrameworkTimer
+        isActive={currentStage === 'structuring'}
+        difficultyLevel={caseData.difficulty_level || 3}
+      />
+
       {/* Data Exhibits Slideover - Hide on mobile */}
       <div className="hidden md:block">
         <DataExhibitSlideover exhibits={sampleExhibits} />
       </div>
 
-      {/* End Interview Button */}
-      <div className="absolute top-4 right-4 md:top-8 md:right-8">
+      {/* Controls - Top Right */}
+      <div className="absolute top-4 right-4 md:top-8 md:right-8 flex gap-2 items-center">
+        {/* Transcription Toggle */}
+        <button
+          onClick={() => {
+            const newValue = !showTranscription
+            setShowTranscription(newValue)
+            if (typeof window !== 'undefined') {
+              localStorage.setItem('interview_show_transcription', String(newValue))
+            }
+          }}
+          className={`px-3 py-2 md:px-4 md:py-2.5 border rounded-lg text-xs md:text-sm font-medium transition-colors flex items-center gap-1.5 ${
+            showTranscription
+              ? 'bg-transparent border-gray-500 text-gray-600 hover:bg-gray-50'
+              : 'bg-yellow-50 border-yellow-600 text-yellow-900 hover:bg-yellow-100'
+          }`}
+          title={showTranscription ? 'Hide transcription (Verbal-only mode)' : 'Show transcription'}
+        >
+          <span className="text-sm md:text-base">{showTranscription ? '👁️' : '🎧'}</span>
+          <span className="hidden sm:inline">{showTranscription ? 'Text' : 'Audio'}</span>
+        </button>
+
+        {/* End Interview Button */}
         <button
           onClick={endInterview}
           className="px-3 py-2 md:px-4 md:py-2.5 bg-transparent border border-gray-500 rounded-lg text-gray-600 hover:bg-gray-50 text-xs md:text-sm font-medium transition-colors"
@@ -767,7 +811,7 @@ Begin by greeting the candidate warmly and then deliver the introduction from St
         {/* Transcript Display */}
         <div className="vs-transcript-container">
           <div className="vs-transcript-line vs-fade-in">
-            {displayedText}
+            {showTranscription ? displayedText : (displayedText ? '🎧 Listening mode active' : '')}
           </div>
         </div>
 
