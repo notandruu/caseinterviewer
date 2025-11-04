@@ -35,7 +35,7 @@ export const AnalyzerSchema = {
     nudge: {
       type: 'string',
       maxLength: 60,
-      description: 'Optional guidance prompt if clarification needed',
+      description: 'Guidance prompt if clarification needed (may be empty)',
     },
     section_end: {
       type: 'boolean',
@@ -49,6 +49,7 @@ export const AnalyzerSchema = {
     'estimates',
     'readiness',
     'section_end',
+    'nudge'
   ],
 } as const;
 
@@ -58,6 +59,6 @@ export type AnalyzerJSON = {
   math_steps: string[];
   estimates: Record<string, number>;
   readiness: 'needs_clarification' | 'good_to_progress' | 'incomplete_data';
-  nudge?: string;
+  nudge: string;
   section_end: boolean;
 };
