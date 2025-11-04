@@ -1,20 +1,22 @@
 import { NextResponse } from 'next/server'
 
 export async function GET() {
-  const apiKey = process.env.OPENAI_API_KEY
+  // Use Echo's API key to enable billing and usage tracking
+  const echoApiKey = process.env.ECHO_API_KEY
 
-  if (!apiKey) {
+  if (!echoApiKey) {
     return NextResponse.json(
-      { error: 'OpenAI API key not configured' },
+      { error: 'Echo API key not configured' },
       { status: 500 }
     )
   }
 
   try {
-    const response = await fetch('https://api.openai.com/v1/realtime/sessions', {
+    // Route through Echo's proxy to enable automatic billing
+    const response = await fetch('https://api.echo.dev/v1/openai/realtime/sessions', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${apiKey}`,
+        'Authorization': `Bearer ${echoApiKey}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
@@ -25,7 +27,7 @@ export async function GET() {
 
     if (!response.ok) {
       const error = await response.text()
-      console.error('OpenAI API error:', error)
+      console.error('Echo API error:', error)
       return NextResponse.json(
         { error: 'Failed to create session' },
         { status: response.status }
