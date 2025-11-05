@@ -1,22 +1,23 @@
 import { NextResponse } from 'next/server'
 
 export async function GET() {
-  // Use Echo's API key to enable billing and usage tracking
-  const echoApiKey = process.env.ECHO_API_KEY
+  // Note: Using OpenAI directly for Realtime API since Echo doesn't support it yet
+  // Regular API calls (scoring, etc.) still go through Echo for billing
+  const apiKey = process.env.OPENAI_API_KEY
 
-  if (!echoApiKey) {
+  if (!apiKey) {
     return NextResponse.json(
-      { error: 'Echo API key not configured' },
+      { error: 'OpenAI API key not configured' },
       { status: 500 }
     )
   }
 
   try {
-    // Route through Echo's proxy to enable automatic billing
-    const response = await fetch('https://api.echo.dev/v1/openai/realtime/sessions', {
+    // Direct to OpenAI - Realtime API not yet supported by Echo proxy
+    const response = await fetch('https://api.openai.com/v1/realtime/sessions', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${echoApiKey}`,
+        'Authorization': `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
@@ -27,7 +28,7 @@ export async function GET() {
 
     if (!response.ok) {
       const error = await response.text()
-      console.error('Echo API error:', error)
+      console.error('OpenAI Realtime API error:', error)
       return NextResponse.json(
         { error: 'Failed to create session' },
         { status: response.status }
