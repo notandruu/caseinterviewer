@@ -144,13 +144,18 @@ export async function POST(request: NextRequest) {
     const nextSection = getNextSection(currentSection)
 
     if (!nextSection) {
-      // No more sections, mark attempt as completed (only for authenticated users)
+      // No more sections, interview is complete
       if (!isDemoAttempt) {
+        // Save transcript from request (sent by voice session on completion)
+        const transcript = (body as any).transcript || []
+
+        // Mark attempt as processing feedback
         await supabase
           .from('case_attempts')
           .update({
-            state: 'completed',
+            state: 'generating_feedback',
             completed_at: new Date().toISOString(),
+            transcript: transcript, // Save the full transcript
           })
           .eq('id', attemptId)
 
@@ -160,14 +165,23 @@ export async function POST(request: NextRequest) {
           event_type: 'attempt_completed',
           payload: {
             final_section: currentSection,
+            transcript_length: transcript.length,
           },
         })
+
+        // Trigger feedback generation asynchronously (uses Echo credits)
+        // Don't await - let it run in background
+        fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/voice-tools/generate-feedback`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ attemptId }),
+        }).catch(err => console.error('Failed to trigger feedback generation:', err))
       }
 
       return NextResponse.json({
         next_section: null,
         completed: true,
-        message: 'Interview completed successfully',
+        message: 'Interview completed successfully. Generating your personalized feedback...',
       })
     }
 
