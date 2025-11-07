@@ -1,14 +1,16 @@
 'use client'
 
+export const dynamic = 'force-dynamic'
+
 import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { useEcho } from '@merit-systems/echo-react-sdk'
+import { useAuth } from '@/hooks/useAuth'
 import { Target, BarChart3, History, Settings, TrendingUp, Award, Clock, Target as TargetIcon } from 'lucide-react'
 import Image from 'next/image'
 
 export default function AnalyticsPage() {
   const router = useRouter()
-  const { isLoggedIn, user } = useEcho()
+  const { isLoggedIn, user } = useAuth()
 
   useEffect(() => {
     if (!isLoggedIn) {

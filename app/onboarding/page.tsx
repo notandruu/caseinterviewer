@@ -1,8 +1,10 @@
 "use client"
 
+export const dynamic = 'force-dynamic'
+
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
-import { useEcho } from "@merit-systems/echo-react-sdk"
+import { useAuth } from "@/hooks/useAuth"
 import { ChevronLeft, Lock, EyeOff, Fingerprint, Share2, FileText, Target, Users } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 
@@ -25,7 +27,7 @@ type OnboardingStep =
 
 export default function OnboardingPage() {
   const router = useRouter()
-  const { user, isLoggedIn } = useEcho()
+  const { user, isLoggedIn } = useAuth()
   const [currentStep, setCurrentStep] = useState<OnboardingStep>("welcome")
   const [selectedPurpose, setSelectedPurpose] = useState<string>("")
   const [name, setName] = useState("")

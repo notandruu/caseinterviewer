@@ -2,7 +2,7 @@
 
 import { ReactNode, useState, useEffect } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
-import { useEcho } from '@merit-systems/echo-react-sdk'
+import { useAuth } from '@/hooks/useAuth'
 import { Target, BarChart3, History, Settings, User, LogOut, CreditCard, Menu, X } from 'lucide-react'
 import Image from 'next/image'
 import { createClient } from '@/lib/supabase/client'
@@ -32,7 +32,7 @@ interface DashboardLayoutProps {
 export function DashboardLayout({ children }: DashboardLayoutProps) {
   const router = useRouter()
   const pathname = usePathname()
-  const { isLoggedIn, user, signOut } = useEcho()
+  const { isLoggedIn, user, signOut } = useAuth()
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
   const [userName, setUserName] = useState<string>('')
   const [showNameDialog, setShowNameDialog] = useState(false)

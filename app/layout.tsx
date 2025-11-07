@@ -2,7 +2,7 @@ import type { Metadata, Viewport } from 'next'
 import { GeistSans } from 'geist/font/sans'
 import { GeistMono } from 'geist/font/mono'
 import { Analytics } from '@vercel/analytics/next'
-import { EchoProvider } from '@/components/providers/EchoProvider'
+import { Web3Provider } from '@/components/providers/Web3Provider'
 import './globals.css'
 
 export const metadata: Metadata = {
@@ -86,9 +86,9 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`font-sans ${GeistSans.variable} ${GeistMono.variable}`}>
-        <EchoProvider>
+        <Web3Provider>
           {children}
-        </EchoProvider>
+        </Web3Provider>
         <Analytics />
       </body>
     </html>

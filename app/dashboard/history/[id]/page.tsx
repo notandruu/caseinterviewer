@@ -1,8 +1,10 @@
 'use client'
 
+export const dynamic = 'force-dynamic'
+
 import { use, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { useEcho } from '@merit-systems/echo-react-sdk'
+import { useAuth } from '@/hooks/useAuth'
 import {
   ArrowLeft,
   Award,
@@ -44,7 +46,7 @@ interface CaseAttemptDetail {
 
 export default function CaseHistoryDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const router = useRouter()
-  const { isLoggedIn, user } = useEcho()
+  const { isLoggedIn, user } = useAuth()
   const [attempt, setAttempt] = useState<CaseAttemptDetail | null>(null)
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState<'overview' | 'transcript' | 'feedback'>('overview')

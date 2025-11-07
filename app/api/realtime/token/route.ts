@@ -1,8 +1,6 @@
 import { NextResponse } from 'next/server'
 
 export async function GET() {
-  // Note: Using OpenAI directly for Realtime API since Echo doesn't support it yet
-  // Regular API calls (scoring, etc.) still go through Echo for billing
   const apiKey = process.env.OPENAI_API_KEY
 
   if (!apiKey) {
@@ -13,7 +11,6 @@ export async function GET() {
   }
 
   try {
-    // Direct to OpenAI - Realtime API not yet supported by Echo proxy
     const response = await fetch('https://api.openai.com/v1/realtime/sessions', {
       method: 'POST',
       headers: {

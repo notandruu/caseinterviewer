@@ -1,14 +1,16 @@
 'use client'
 
+export const dynamic = 'force-dynamic'
+
 import { use, useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
-import { useEcho } from "@merit-systems/echo-react-sdk"
+import { useAuth } from "@/hooks/useAuth"
 import { createClient } from "@/lib/supabase/client"
 import { VoiceSessionV2 } from "@/components/VoiceSession/VoiceSessionV2"
 
 export default function InterviewPage({ params }: { params: Promise<{ id: string }> }) {
   const router = useRouter()
-  const { isLoggedIn, user } = useEcho()
+  const { isLoggedIn, user } = useAuth()
   const [caseData, setCaseData] = useState<any>(null)
   const [interviewId, setInterviewId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)

@@ -1,8 +1,10 @@
 'use client'
 
+export const dynamic = 'force-dynamic'
+
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { useEcho } from '@merit-systems/echo-react-sdk'
+import { useAuth } from '@/hooks/useAuth'
 import { createClient } from "@/lib/supabase/client"
 import { Target, BarChart3, Clock, History, Settings, User, LogOut, CreditCard, Menu, X } from "lucide-react"
 import Image from "next/image"
@@ -27,7 +29,7 @@ import { Button } from "@/components/ui/button"
 
 export default function DashboardPage() {
   const router = useRouter()
-  const { isLoggedIn, user, signOut } = useEcho()
+  const { isLoggedIn, user, signOut } = useAuth()
   const [cases, setCases] = useState<any[]>([])
   const [checkingOnboarding, setCheckingOnboarding] = useState(true)
   const [userName, setUserName] = useState<string>('')

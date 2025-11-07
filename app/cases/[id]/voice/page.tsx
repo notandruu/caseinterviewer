@@ -1,5 +1,7 @@
 'use client'
 
+export const dynamic = 'force-dynamic'
+
 /**
  * Voice V2 Interview Route
  * Entry point for voice-first case interviews with server-mediated tools
@@ -7,7 +9,7 @@
 
 import { use, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { useEcho } from '@merit-systems/echo-react-sdk'
+import { useAuth } from '@/hooks/useAuth'
 import { createClient } from '@/lib/supabase/client'
 import { isVoiceV2Enabled } from '@/lib/tools'
 import { VoiceSessionV3 } from '@/components/VoiceSession/V3/VoiceSessionV3'
@@ -20,7 +22,7 @@ export default function VoiceInterviewPage({
   params: Promise<{ id: string }>
 }) {
   const router = useRouter()
-  const { isLoggedIn, user } = useEcho()
+  const { isLoggedIn, user } = useAuth()
   const [caseData, setCaseData] = useState<ClientCase | null>(null)
   const [attemptId, setAttemptId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)

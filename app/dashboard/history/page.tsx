@@ -1,8 +1,10 @@
 'use client'
 
+export const dynamic = 'force-dynamic'
+
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { useEcho } from '@merit-systems/echo-react-sdk'
+import { useAuth } from '@/hooks/useAuth'
 import { Clock, TrendingUp, ChevronRight, Award, Calendar, FileText } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { DashboardLayout } from '@/components/DashboardLayout'
@@ -28,7 +30,7 @@ interface CaseAttemptWithCase {
 
 export default function HistoryPage() {
   const router = useRouter()
-  const { isLoggedIn, user } = useEcho()
+  const { isLoggedIn, user } = useAuth()
   const [attempts, setAttempts] = useState<CaseAttemptWithCase[]>([])
   const [loading, setLoading] = useState(true)
   const supabase = createClient()

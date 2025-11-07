@@ -1,14 +1,16 @@
 'use client'
 
+export const dynamic = 'force-dynamic'
+
 import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { useEcho } from '@merit-systems/echo-react-sdk'
+import { useAuth } from '@/hooks/useAuth'
 import { ArrowLeft, User, Bell, Shield } from 'lucide-react'
 import { DashboardLayout } from '@/components/DashboardLayout'
 
 export default function SettingsPage() {
   const router = useRouter()
-  const { isLoggedIn, user } = useEcho()
+  const { isLoggedIn, user } = useAuth()
 
   useEffect(() => {
     if (!isLoggedIn) {

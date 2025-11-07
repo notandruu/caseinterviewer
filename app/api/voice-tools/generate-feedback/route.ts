@@ -8,7 +8,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { getEchoOpenAI } from '@/lib/echo/server'
+import { getOpenAI } from '@/lib/openai/server'
 import type { GroundTruth, CaseSection, RubricScores } from '@/types/cases'
 
 export async function POST(request: NextRequest) {
@@ -60,10 +60,9 @@ export async function POST(request: NextRequest) {
     // Extract user responses by section from transcript
     const userResponses = extractResponsesBySection(transcript)
 
-    // Generate feedback using Echo (THIS IS WHERE CREDITS ARE CHARGED)
-    const echoOpenAI = getEchoOpenAI()
+    const openai = getOpenAI()
 
-    const feedbackResponse = await echoOpenAI.chat.completions.create({
+    const feedbackResponse = await openai.chat.completions.create({
       model: 'gpt-4o',
       messages: [{
         role: 'system',
@@ -199,14 +198,6 @@ Be honest but constructive. Focus on specific examples from their responses.`
 
   } catch (error: any) {
     console.error('[generate-feedback] Error:', error)
-
-    // Check if it's an Echo credits error
-    if (error.message?.includes('insufficient') || error.status === 402) {
-      return NextResponse.json(
-        { error: 'Insufficient credits to generate feedback. Please add more credits.' },
-        { status: 402 }
-      )
-    }
 
     return NextResponse.json(
       { error: 'Internal server error' },

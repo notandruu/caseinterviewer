@@ -169,7 +169,7 @@ export async function POST(request: NextRequest) {
           },
         })
 
-        // Trigger feedback generation asynchronously (uses Echo credits)
+        // Trigger feedback generation asynchronously
         // Don't await - let it run in background
         fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/voice-tools/generate-feedback`, {
           method: 'POST',

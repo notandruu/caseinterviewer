@@ -1,8 +1,10 @@
 'use client'
 
+export const dynamic = 'force-dynamic'
+
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { useEcho } from '@merit-systems/echo-react-sdk'
+import { useAuth } from '@/hooks/useAuth'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion'
@@ -12,7 +14,7 @@ import Image from 'next/image'
 
 export default function HomePage() {
   const router = useRouter()
-  const { isLoggedIn, isLoading } = useEcho()
+  const { isLoggedIn, isLoading } = useAuth()
   const [currentTestimonial, setCurrentTestimonial] = useState(0)
 
   const testimonials = [
