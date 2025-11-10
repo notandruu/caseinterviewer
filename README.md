@@ -1,55 +1,58 @@
-# Your App - Fresh Start 🚀
+# CaseInterviewer
 
-A clean Next.js 15 starter with UI components, Supabase, and Echo SDK ready to go.
+AI voice agent that runs mock consulting interviews in real time. Adapts follow-up questions on the fly, generates data exhibits mid-conversation, and scores you step by step. Sessions are paid in ETH via micropayments on Base L2, with a staking mechanic that returns funds only if you hit a score threshold. Contracts in Foundry, wallet integration with wagmi, payments handled through ethers.js.
 
-## What's Included
+## Stack
 
-### ✅ UI/UX
-- **Shadcn/ui Components** - 50+ pre-built components in `components/ui/`
-- **Tailwind CSS** - Configured and ready
-- **Responsive Design** - Mobile-first approach
-- **Audio Visualizer** - Reusable component in `components/audio-visualizer.tsx`
+- **Framework**: Next.js 15, TypeScript, Tailwind CSS
+- **AI/Voice**: GPT-4o Realtime API (OpenAI), ElevenLabs TTS
+- **Auth**: Supabase magic-link
+- **Database**: Supabase PostgreSQL
+- **Payments**: ETH on Base L2 — wagmi + ethers.js
+- **Contracts**: Foundry (Solidity 0.8.24)
+- **UI**: Shadcn/ui
 
-### ✅ Database
-- **Supabase** - PostgreSQL database
-  - Client: `lib/supabase/client.ts`
-  - Server: `lib/supabase/server.ts`
-- Ready for real-time subscriptions and RLS policies
+## How Payments Work
 
-### ✅ Authentication
-- **Echo SDK** - Authentication and billing
-  - Provider configured in `app/layout.tsx`
-  - Login page: `/auth/login`
-  - Signup page: `/auth/signup`
-  - Hook: `useEcho()` from `@merit-systems/echo-react-sdk`
+1. User connects wallet (MetaMask, Coinbase Wallet, or WalletConnect)
+2. Before the interview starts, user calls `startSession(sessionId)` and stakes ETH
+3. Interview runs — AI scores each section live
+4. At the end, the server calls `completeSession(sessionId, score)` on-chain
+5. Score ≥ threshold (default 70%) → stake returned automatically
+6. Score < threshold → stake kept as protocol revenue
 
-### ✅ Configuration
-- **TypeScript** - Full type safety
-- **Next.js 15** - App router
-- **ESLint** - Code quality
-- **Environment Variables** - `.env.local` for secrets
-
----
+The contract is deployed on Base. Default session price is 0.001 ETH.
 
 ## Getting Started
 
-### 1. Install Dependencies
+### 1. Install dependencies
+
 ```bash
 npm install
 ```
 
-### 2. Environment Variables
-Create `.env.local`:
+### 2. Set up environment variables
+
+Copy `.env.example` to `.env.local` and fill in:
+
 ```env
 # Supabase
-NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your_anon_key
 
-# Echo SDK
-NEXT_PUBLIC_ECHO_CLIENT_ID=your_echo_client_id
+# OpenAI
+OPENAI_API_KEY=sk-...
+
+# ETH Payments
+NEXT_PUBLIC_PAYMENT_CONTRACT_ADDRESS=0x...
+NEXT_PUBLIC_SESSION_PRICE_ETH=0.001
+NEXT_PUBLIC_SCORE_THRESHOLD=70
+NEXT_PUBLIC_CHAIN_ID=84532
+PAYMENT_ADMIN_PRIVATE_KEY=0x...
 ```
 
-### 3. Run Development Server
+### 3. Run locally
+
 ```bash
 npm run dev
 ```
@@ -58,151 +61,79 @@ Open [http://localhost:3000](http://localhost:3000)
 
 ---
 
+## Smart Contract
+
+Source: `contracts/src/CaseInterviewSession.sol`
+
+```bash
+# Install Foundry
+curl -L https://foundry.paradigm.xyz | bash && foundryup
+
+cd contracts
+
+# Run tests
+forge test
+
+# Deploy to Base Sepolia
+forge script script/Deploy.s.sol \
+  --rpc-url base_sepolia \
+  --broadcast \
+  --verify
+```
+
+Set `DEPLOYER_PRIVATE_KEY`, `PAYMENT_ADMIN_ADDRESS`, and `BASESCAN_API_KEY` before deploying.
+
+---
+
+## Database
+
+Migrations live in `supabase/migrations/`. Run them against your Supabase project:
+
+```bash
+supabase db push
+```
+
+Seed data for the Air Panama case is in `supabase/seed/voice_cases.sql`.
+
+---
+
 ## Project Structure
 
 ```
 ├── app/
-│   ├── layout.tsx          # Root layout with Echo provider
-│   ├── page.tsx            # Home page
-│   ├── globals.css         # Global styles
-│   └── auth/               # Auth pages (login, signup)
+│   ├── api/
+│   │   ├── realtime/token/     # OpenAI Realtime session proxy
+│   │   ├── sessions/complete/  # Calls completeSession() on-chain
+│   │   └── voice-tools/        # Interview tool endpoints (score, advance, hint, etc.)
+│   ├── auth/                   # Login + signup (magic link)
+│   ├── dashboard/              # Cases, history, analytics, settings, pricing
+│   ├── interview/[id]/         # Live voice session
+│   └── onboarding/             # First-time user flow
 ├── components/
-│   ├── ui/                 # Shadcn/ui components
-│   ├── echo/               # Echo SDK components
-│   ├── providers/          # React providers
-│   └── audio-visualizer.tsx # Reusable visualizer
+│   ├── VoiceSession/           # Main interview UI (V2 + V3)
+│   ├── providers/
+│   │   └── Web3Provider.tsx    # wagmi + TanStack Query
+│   └── ui/                     # Shadcn/ui components
+├── contracts/
+│   ├── src/CaseInterviewSession.sol
+│   ├── test/CaseInterviewSession.t.sol
+│   └── script/Deploy.s.sol
+├── hooks/
+│   ├── useAuth.ts              # Supabase session hook
+│   └── useSessionPayment.ts    # wagmi payment hook
 ├── lib/
-│   ├── supabase/           # Database clients
-│   └── config/
-│       └── echo.ts         # Echo configuration
-└── middleware.ts           # Next.js middleware
+│   ├── supabase/               # DB clients (browser + server)
+│   ├── web3/                   # wagmi config + contract ABI
+│   └── openai/                 # OpenAI server helper
+└── middleware.ts               # Supabase session guard
 ```
 
 ---
 
-## Building Your App
-
-### Create a New Page
-1. Create file in `app/your-page/page.tsx`
-2. Use client or server component as needed
-3. Access UI components from `@/components/ui/`
-
-Example:
-```tsx
-'use client'
-
-import { Button } from '@/components/ui/button'
-import { Card } from '@/components/ui/card'
-
-export default function YourPage() {
-  return (
-    <div className="container mx-auto p-6">
-      <Card>
-        <h1>Your Page</h1>
-        <Button>Click Me</Button>
-      </Card>
-    </div>
-  )
-}
-```
-
-### Use Supabase
-```tsx
-import { createClient } from '@/lib/supabase/client'
-
-const supabase = createClient()
-
-// Query data
-const { data } = await supabase
-  .from('your_table')
-  .select('*')
-```
-
-### Use Echo Auth
-```tsx
-import { useEcho } from '@merit-systems/echo-react-sdk'
-
-const { isLoggedIn, user } = useEcho()
-```
-
----
-
-## Available Components
-
-### Shadcn/ui Components
-All available in `components/ui/`:
-- `Button`, `Card`, `Dialog`, `Input`, `Label`
-- `Select`, `Checkbox`, `RadioGroup`, `Switch`
-- `Alert`, `Badge`, `Avatar`, `Separator`
-- `Sheet`, `Tabs`, `Tooltip`, `Popover`
-- ...and 40+ more!
-
-### Custom Components
-- `AudioVisualizer` - Animated visual feedback
-- `ThemeProvider` - Dark mode support
-
----
-
-## Next Steps
-
-1. **Define Your Database Schema**
-   - Go to Supabase dashboard
-   - Create tables in SQL Editor
-   - Set up Row Level Security (RLS)
-
-2. **Create Your Pages**
-   - Add pages to `app/` directory
-   - Use server components for data fetching
-   - Use client components for interactivity
-
-3. **Add API Routes**
-   - Create in `app/api/your-route/route.ts`
-   - Use POST, GET, etc. handlers
-
-4. **Customize Styling**
-   - Edit `app/globals.css`
-   - Modify Tailwind config if needed
-
----
-
-## Useful Commands
+## Commands
 
 ```bash
-# Development
-npm run dev
-
-# Build for production
-npm run build
-
-# Start production server
-npm start
-
-# Lint code
-npm run lint
+npm run dev       # development server
+npm run build     # production build
+npm run lint      # lint
 ```
-
----
-
-## Tech Stack
-
-- **Framework**: Next.js 15
-- **Language**: TypeScript
-- **Styling**: Tailwind CSS
-- **UI Components**: Shadcn/ui
-- **Database**: Supabase (PostgreSQL)
-- **Auth & Billing**: Echo SDK
-- **Deployment**: Vercel (recommended)
-
----
-
-## Resources
-
-- [Next.js Docs](https://nextjs.org/docs)
-- [Tailwind CSS](https://tailwindcss.com/docs)
-- [Shadcn/ui](https://ui.shadcn.com)
-- [Supabase Docs](https://supabase.com/docs)
-- [Echo SDK Docs](https://docs.echo.merit.systems)
-
----
-
-Happy building! 🎉
