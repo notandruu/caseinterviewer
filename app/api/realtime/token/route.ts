@@ -19,15 +19,12 @@ export async function GET() {
       body: JSON.stringify({
         model: "gpt-4o-realtime-preview-2024-12-17",
         voice: "verse",
+        input_audio_transcription: { model: "gpt-4o-mini-transcribe" },
         turn_detection: {
           type: "server_vad",
-          threshold: 0.5,
-          prefix_padding_ms: 300,
-          silence_duration_ms: 800,
-          create_response: false,
+          create_response: true,
           interrupt_response: true
         },
-        input_audio_transcription: { model: "gpt-4o-mini-transcribe" },
         temperature: 0.6,
         max_response_output_tokens: 128
       })

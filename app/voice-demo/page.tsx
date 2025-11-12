@@ -14,6 +14,7 @@ export default function VoiceDemoPage() {
   const [status, setStatus] = useState<Status>("idle")
   const [lastQuestion, setLastQuestion] = useState<string>("")
   const [lastTranscript, setLastTranscript] = useState<string>("")
+  const [browserAudioMode, setBrowserAudioMode] = useState(true)
   const audioHost = useRef<HTMLDivElement | null>(null)
   const sessRef = useRef<RealtimeSession | null>(null)
   const turnInProgress = useRef(false)
@@ -32,6 +33,101 @@ export default function VoiceDemoPage() {
       throw new Error("failed to fetch token")
     }
     return resp.json()
+  }
+
+  async function playFromRestTTS() {
+    try {
+      const r = await fetch('/api/tts?text=' + encodeURIComponent('Audio check'))
+      if (!r.ok) throw new Error('TTS route failed')
+      const buf = await r.arrayBuffer()
+      const blob = new Blob([buf], { type: 'audio/mpeg' })
+      const url = URL.createObjectURL(blob)
+      const a = new Audio()
+      a.src = url
+      a.controls = true
+      document.body.appendChild(a)
+      await a.play()
+      console.log('[voice-demo] REST TTS playback OK')
+    } catch (e) {
+      console.error('[voice-demo] REST TTS playback failed', e)
+    }
+  }
+
+  function hasSpeechSynthesis() {
+    return typeof window !== 'undefined' && 'speechSynthesis' in window
+  }
+
+  function hasBrowserSTT() {
+    return typeof window !== 'undefined' &&
+      (('SpeechRecognition' in window) || ('webkitSpeechRecognition' in window))
+  }
+
+  function unlockSpeechSynthesis() {
+    try {
+      if (!hasSpeechSynthesis()) return
+      window.speechSynthesis.cancel()
+      const u = new SpeechSynthesisUtterance('')
+      window.speechSynthesis.speak(u)
+    } catch {}
+  }
+
+  async function speakOut(text: string, s?: RealtimeSession | null) {
+    if (browserAudioMode && hasSpeechSynthesis()) {
+      const u = new SpeechSynthesisUtterance(text || 'Audio check')
+      u.rate = 1
+      u.pitch = 1
+      window.speechSynthesis.speak(u)
+      return
+    }
+    if (s) s.speak(text)
+  }
+
+  function listenBrowserSTT(timeoutMs = 7000): Promise<string> {
+    return new Promise((resolve) => {
+      if (!hasBrowserSTT()) return resolve('')
+
+      const Rec = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+      const rec = new Rec()
+      rec.lang = 'en-US'
+      rec.interimResults = false
+      rec.maxAlternatives = 1
+
+      let settled = false
+      const timer = setTimeout(() => {
+        if (!settled) {
+          settled = true
+          try { rec.stop() } catch {}
+          resolve('')
+        }
+      }, timeoutMs)
+
+      rec.onresult = (e: any) => {
+        if (settled) return
+        settled = true
+        clearTimeout(timer)
+        const text = e?.results?.[0]?.[0]?.transcript || ''
+        resolve(text)
+      }
+      rec.onerror = () => {
+        if (settled) return
+        settled = true
+        clearTimeout(timer)
+        resolve('')
+      }
+      rec.onend = () => {
+        if (settled) return
+        settled = true
+        clearTimeout(timer)
+        resolve('')
+      }
+
+      try {
+        rec.start()
+      } catch {
+        clearTimeout(timer)
+        resolve('')
+      }
+    })
   }
 
   // Simple retry for 429 and transient network errors
@@ -78,18 +174,16 @@ export default function VoiceDemoPage() {
         s.remoteAudio.muted = false
         s.remoteAudio.setAttribute('playsinline', 'true')
         audioHost.current.appendChild(s.remoteAudio)
-        // Trigger play to overcome autoplay restrictions
-        s.remoteAudio.play().then(
-          () => console.log('[voice-demo] remoteAudio.play OK'),
-          err => console.warn('[voice-demo] remoteAudio.play blocked:', err)
-        )
+        s.remoteAudio.play().catch(err => console.warn('[voice-demo] remoteAudio.play blocked:', err))
       }
 
-      // Dump stats 3s after connect to verify audio bytes flowing
+      unlockSpeechSynthesis()
+      console.log('[voice-demo] connection established')
+      
+      // Dump audio stats 3s after connect
       setTimeout(() => s.dumpInboundAudioStats('post-start'), 3000)
-
-      // kick off first turn
-      await nextTurn(undefined, s)
+      
+      setStatus('idle')
     } catch (err) {
       console.error("[voice-demo] failed to connect", err)
       setStatus("idle")
@@ -107,72 +201,7 @@ export default function VoiceDemoPage() {
     }
   }
 
-  async function toggleVAD(on: boolean) {
-    const s = sessRef.current
-    if (!s) return
-    if (on) {
-      console.log("[voice-demo] enabling server VAD")
-      s.updateSession({
-        turn_detection: {
-          type: "server_vad",
-          threshold: 0.5,
-          prefix_padding_ms: 300,
-          silence_duration_ms: 800,
-          create_response: false,
-          interrupt_response: true
-        }
-      })
-    } else {
-      console.log("[voice-demo] disabling VAD")
-      s.updateSession({ turn_detection: { type: "none" } })
-    }
-  }
 
-  async function askListen5s() {
-    if (turnInProgress.current) return
-    const s = sessRef.current
-    if (!s) return
-    turnInProgress.current = true
-    try {
-      setStatus("asking")
-      const iq = await fetchWithRetry("/api/voice-tools/interviewer", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ demo: true, caseId: CASE_ID, section: SECTION, snippet: SNIPPET })
-      })
-      const q = await iq.json().catch(() => ({ question: "Please respond briefly." }))
-      const question = q?.question ?? "Please respond briefly."
-      setLastQuestion(question)
-      console.log("[voice-demo] interviewer question:", question)
-
-      // Speak, then listen for up to 5s for VAD stop, then read transcript
-      s.speak(question)
-      setStatus("listening")
-      await s.waitForSpeechStop(5000)
-      const finalText = await s.waitForFinalTranscript(5000).catch(() => "")
-      setLastTranscript(finalText)
-      console.log("[voice-demo] 5s window transcript:", finalText)
-
-      if (!finalText || finalText.trim().length === 0) {
-        console.warn("[voice-demo] skip analyzer due to empty transcript")
-        setStatus("asking")
-        return
-      }
-
-      setStatus("analyzing")
-      const idk = Math.random().toString(36).slice(2)
-      const an = await fetchWithRetry("/api/voice-tools/analyze", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-Idempotency-Key": idk },
-        body: JSON.stringify({ demo: true, caseId: CASE_ID, section: SECTION, answer: finalText })
-      })
-      const a = await an.json().catch(() => ({ next_action: { type: "continue" } }))
-      console.log("[voice-demo] analyzer next_action:", a?.next_action)
-      setStatus("branching")
-    } finally {
-      turnInProgress.current = false
-    }
-  }
 
   async function nextTurn(nudge?: string | null, providedSess?: RealtimeSession) {
     if (turnInProgress.current) {
@@ -206,14 +235,18 @@ export default function VoiceDemoPage() {
       setLastQuestion(question)
       console.log("[voice-demo] interviewer question:", question)
 
-      // 2) speak question
-      activeSess.speak(question)
+      // speak question
+      await speakOut(question, activeSess)
       setStatus("listening")
 
-      // 3) wait for final transcript
+      // wait for transcript
       let finalText = ""
       try {
-        finalText = await activeSess.waitForFinalTranscript(25000) // give first turn more time
+        if (browserAudioMode) {
+          finalText = await listenBrowserSTT(7000)
+        } else {
+          finalText = await activeSess.waitForFinalTranscript(20000)
+        }
         setLastTranscript(finalText)
         console.log("[voice-demo] transcript received:", finalText)
       } catch (err) {
@@ -298,50 +331,24 @@ export default function VoiceDemoPage() {
       <div>status: {status}</div>
 
       <div style={{ marginTop: 8 }}>
-        <button onClick={() => start()} disabled={status !== "idle"} style={{ marginRight: 8 }}>
+        <label style={{ marginRight: 12 }}>
+          <input
+            type="checkbox"
+            checked={browserAudioMode}
+            onChange={(e) => setBrowserAudioMode(e.target.checked)}
+            style={{ marginRight: 6 }}
+          />
+          Browser audio mode
+        </label>
+
+        <button onClick={() => start()} disabled={status !== 'idle'} style={{ marginRight: 8 }}>
           Start
         </button>
-        <button onClick={() => stop()} disabled={status === "idle"}>
-          Disconnect
-        </button>
-        <button onClick={() => sessRef.current?.speak('Audio check. You should hear me.')} disabled={!sessRef.current} style={{ marginLeft: 12 }}>
-          Ping TTS
-        </button>
-        <button onClick={() => sessRef.current?.dumpInboundAudioStats('click')} disabled={!sessRef.current} style={{ marginLeft: 12 }}>
-          Dump audio stats
-        </button>
-        <button
-          onClick={async () => {
-            const s = sessRef.current
-            if (!s || turnInProgress.current) return
-            turnInProgress.current = true
-            try {
-              s.speak('Please say hello, then pause for two seconds.')
-              setStatus('listening')
-              await s.waitForSpeechStop(3000).catch(() => {})
-              const t = await s.waitForFinalTranscript(4000).catch(() => '')
-              console.log('[voice-demo] PTT test transcript:', t)
-              setStatus('idle')
-            } finally {
-              turnInProgress.current = false
-            }
-          }}
-          disabled={!sessRef.current || turnInProgress.current}
-          style={{ marginLeft: 12 }}
-        >
-          PTT test
-        </button>
-        <button onClick={() => nextTurn()} disabled={status === "idle" || turnInProgress.current} style={{ marginLeft: 12 }}>
+        <button onClick={() => nextTurn()} disabled={status !== 'idle' || turnInProgress.current} style={{ marginRight: 8 }}>
           Ask once
         </button>
-        <button onClick={() => askListen5s()} disabled={!sessRef.current || turnInProgress.current} style={{ marginLeft: 12 }}>
-          Ask + listen 5s
-        </button>
-        <button onClick={() => toggleVAD(false)} disabled={!sessRef.current} style={{ marginLeft: 12 }}>
-          VAD off
-        </button>
-        <button onClick={() => toggleVAD(true)} disabled={!sessRef.current} style={{ marginLeft: 8 }}>
-          VAD on
+        <button onClick={() => stop()} disabled={status === 'idle'}>
+          Disconnect
         </button>
       </div>
 
