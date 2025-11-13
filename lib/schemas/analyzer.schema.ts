@@ -22,11 +22,6 @@ export const AnalyzerSchema = {
       maxItems: 10,
       description: 'Mathematical calculations performed by the candidate',
     },
-    estimates: {
-      type: 'object',
-      additionalProperties: { type: 'number' },
-      description: 'Estimated values provided by the candidate',
-    },
     readiness: {
       type: 'string',
       enum: ['needs_clarification', 'good_to_progress', 'incomplete_data'],
@@ -46,8 +41,8 @@ export const AnalyzerSchema = {
     'strengths',
     'red_flags',
     'math_steps',
-    'estimates',
     'readiness',
+    'nudge',
     'section_end',
   ],
 } as const;
@@ -56,8 +51,9 @@ export type AnalyzerJSON = {
   strengths: string[];
   red_flags: string[];
   math_steps: string[];
-  estimates: Record<string, number>;
   readiness: 'needs_clarification' | 'good_to_progress' | 'incomplete_data';
-  nudge?: string;
+  nudge: string;
   section_end: boolean;
 };
+
+
