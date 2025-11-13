@@ -1,49 +1,46 @@
-import { NextRequest, NextResponse } from 'next/server'
-
-// Environment variables (set in .env.local):
-// ELEVENLABS_API_KEY - your ElevenLabs API key
-// ELEVENLABS_VOICE_ID - voice ID to use (optional, defaults to Adam)
+import { NextRequest } from 'next/server'
 
 export async function GET(req: NextRequest) {
-  const url = new URL(req.url)
-  const text = url.searchParams.get('text') || 'Hello from ElevenLabs placeholder'
-
   const apiKey = process.env.ELEVENLABS_API_KEY
-  const voiceId = process.env.ELEVENLABS_VOICE_ID || 'pNInz6obpgDQGcFmaJgB' // Adam
+  const voiceId = process.env.ELEVENLABS_VOICE_ID
+  const modelId = process.env.ELEVENLABS_TTS_MODEL || 'eleven_multilingual_v2'
 
-  // Placeholder mode when no API key
-  if (!apiKey) {
-    console.warn('[tts-elevenlabs] No ELEVENLABS_API_KEY found, returning placeholder')
-    const emptyAudio = Buffer.from([])
-    return new NextResponse(emptyAudio, {
-      headers: {
-        'Content-Type': 'audio/mpeg',
-        'X-Debug': 'placeholder-no-api-key',
-      },
-    })
+  if (!apiKey || !voiceId) {
+    return new Response(JSON.stringify({ error: 'Missing ELEVENLABS_API_KEY or ELEVENLABS_VOICE_ID' }), { status: 500 })
   }
 
-  try {
-    // TODO: Real ElevenLabs API call
-    // POST https://api.elevenlabs.io/v1/text-to-speech/{voiceId}
-    // Headers: xi-api-key, Content-Type: application/json
-    // Body: { text, model_id: "eleven_turbo_v2", voice_settings: {...} }
-    // Return audio/mpeg response
+  const { searchParams } = new URL(req.url)
+  const text = searchParams.get('text') || 'Audio check'
 
-    // For now, return placeholder until API key is configured
-    console.log('[tts-elevenlabs] API key present but real call not yet implemented')
-    const emptyAudio = Buffer.from([])
-    return new NextResponse(emptyAudio, {
-      headers: {
-        'Content-Type': 'audio/mpeg',
-        'X-Debug': 'placeholder-implementation-pending',
-      },
+  // ElevenLabs streaming TTS endpoint
+  const url = `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}/stream?optimize_streaming_latency=0`
+
+  const r = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'xi-api-key': apiKey,
+      'content-type': 'application/json',
+      'accept': 'audio/mpeg'
+    },
+    body: JSON.stringify({
+      text,
+      model_id: modelId,
+      // You can tweak these if desired
+      voice_settings: { stability: 0.5, similarity_boost: 0.75 }
     })
-  } catch (error: any) {
-    console.error('[tts-elevenlabs] Error:', error)
-    return NextResponse.json(
-      { error: 'tts_failed', detail: error.message },
-      { status: 500 }
-    )
+  })
+
+  if (!r.ok) {
+    const errTxt = await r.text().catch(() => '')
+    return new Response(JSON.stringify({ error: 'TTS failed', details: errTxt }), { status: 500 })
   }
+
+  // Stream audio back to the browser
+  return new Response(r.body, {
+    status: 200,
+    headers: {
+      'content-type': 'audio/mpeg',
+      'cache-control': 'no-store'
+    }
+  })
 }
