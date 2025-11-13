@@ -25,7 +25,7 @@ function makeBrowserSTT(): STT {
     ? ((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition)
     : null
   const isSupported = !!SR
-  let rec: SpeechRecognition | null = null
+  let rec: any = null
   let finalText = ""
 
   function start(onFinal: (text: string) => void) {
@@ -127,7 +127,6 @@ export default function ElevenLabsDemoPage() {
 
     const data = await resp.json().catch(() => ({}))
     const question = data?.question || "Please respond briefly."
-    setLastQuestion(question)
     return question
   }
 
@@ -149,9 +148,53 @@ export default function ElevenLabsDemoPage() {
 
     const data = await resp.json().catch(() => ({}))
     const nextAction = data?.next_action || { type: "continue" }
-    const summary = `${nextAction.type}${nextAction.nudge ? ` (nudge: ${nextAction.nudge})` : ""}`
-    setLastNextAction(summary)
-    return nextAction
+    return { nextAction, analyzerJson: data?.analyzer_json }
+  }
+
+  type TurnResult = {
+    question: string
+    transcript: string
+    nextAction: any
+    analyzerJson?: any
+  }
+
+  async function runTurn(adapter: VoiceAdapter, nudge?: string | null): Promise<TurnResult> {
+    // 1) asking
+    setStatus("asking")
+    const question = await getInterviewerQuestion(nudge)
+
+    // 2) speaking
+    setStatus("speaking")
+    await adapter.speak(question)
+
+    // 3) listening
+    setStatus("listening")
+    const transcript = await adapter.listen()
+
+    // 4) if empty transcript, return early
+    if (!transcript || transcript.trim().length === 0) {
+      console.warn("[elevenlabs-demo] Empty transcript in runTurn, skipping analyzer")
+      setStatus("idle")
+      return {
+        question,
+        transcript: "",
+        nextAction: { type: "continue" },
+      }
+    }
+
+    // 5) analyzing
+    setStatus("analyzing")
+    const { nextAction, analyzerJson } = await analyzeAnswer(transcript)
+
+    // 6) back to idle
+    setStatus("idle")
+
+    return {
+      question,
+      transcript,
+      nextAction,
+      analyzerJson,
+    }
   }
 
   // ElevenLabs TTS + Browser STT adapter
@@ -214,31 +257,19 @@ export default function ElevenLabsDemoPage() {
     },
   }
 
-  // Existing "one button" flow (can still keep)
+  // Existing "one button" flow (refactored to use runTurn)
   async function runSingleTurn() {
     const adapter: VoiceAdapter = useElevenLabs
       ? elevenLabsAdapter
       : textOnlyAdapter
 
-    setStatus("asking")
-    const question = await getInterviewerQuestion()
+    const result = await runTurn(adapter)
 
-    setStatus("speaking")
-    await adapter.speak(question)
-
-    setStatus("listening")
-    const transcript = await adapter.listen()
-
-    if (!transcript || transcript.trim().length === 0) {
-      console.warn("[elevenlabs-demo] Empty transcript in runSingleTurn, skipping analyzer")
-      setStatus("idle")
-      return
-    }
-
-    setStatus("analyzing")
-    await analyzeAnswer(transcript)
-
-    setStatus("idle")
+    // Update UI state
+    setLastQuestion(result.question)
+    setLastTranscript(result.transcript || "(none)")
+    const summary = `${result.nextAction.type}${result.nextAction.nudge ? ` (nudge: ${result.nextAction.nudge})` : ""}`
+    setLastNextAction(summary)
   }
 
   // New: Ask only (no auto listen)
@@ -249,6 +280,7 @@ export default function ElevenLabsDemoPage() {
 
     setStatus("asking")
     const question = await getInterviewerQuestion()
+    setLastQuestion(question)
 
     setStatus("speaking")
     await adapter.speak(question)
@@ -273,7 +305,9 @@ export default function ElevenLabsDemoPage() {
     }
 
     setStatus("analyzing")
-    await analyzeAnswer(transcript)
+    const { nextAction } = await analyzeAnswer(transcript)
+    const summary = `${nextAction.type}${nextAction.nudge ? ` (nudge: ${nextAction.nudge})` : ""}`
+    setLastNextAction(summary)
 
     setStatus("idle")
   }
