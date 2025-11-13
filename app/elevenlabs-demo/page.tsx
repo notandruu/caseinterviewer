@@ -65,7 +65,8 @@ function makeBrowserSTT(): STT {
     }
 
     rec.onerror = (err: any) => {
-      console.error("[elevenlabs-demo] STT onerror:", err)
+      console.warn("[elevenlabs-demo] STT onerror:", err?.error || err?.message || "unknown error")
+      // Don't throw, just let onend handle cleanup
     }
 
     rec.onend = () => {
@@ -98,7 +99,9 @@ export default function ElevenLabsDemoPage() {
   const [status, setStatus] = useState<Status>("idle")
   const [lastQuestion, setLastQuestion] = useState("")
   const [lastTranscript, setLastTranscript] = useState("")
-  const [lastNextAction, setLastNextAction] = useState("")
+  const [lastNextActionType, setLastNextActionType] = useState("")
+  const [lastNextActionNudge, setLastNextActionNudge] = useState<string | null>(null)
+  const [lastAnalyzerReady, setLastAnalyzerReady] = useState<string | null>(null)
   const sttRef = useRef<STT | null>(null)
 
   useEffect(() => {
@@ -147,15 +150,16 @@ export default function ElevenLabsDemoPage() {
     })
 
     const data = await resp.json().catch(() => ({}))
-    const nextAction = data?.next_action || { type: "continue" }
-    return { nextAction, analyzerJson: data?.analyzer_json }
+    const next_action = data?.next_action || { type: "continue" }
+    const analyzer_json = data?.analyzer_json || undefined
+    return { next_action, analyzer_json }
   }
 
   type TurnResult = {
     question: string
     transcript: string
-    nextAction: any
-    analyzerJson?: any
+    next_action: any
+    analyzer_json?: any
   }
 
   async function runTurn(adapter: VoiceAdapter, nudge?: string | null): Promise<TurnResult> {
@@ -178,13 +182,13 @@ export default function ElevenLabsDemoPage() {
       return {
         question,
         transcript: "",
-        nextAction: { type: "continue" },
+        next_action: { type: "continue" },
       }
     }
 
     // 5) analyzing
     setStatus("analyzing")
-    const { nextAction, analyzerJson } = await analyzeAnswer(transcript)
+    const { next_action, analyzer_json } = await analyzeAnswer(transcript)
 
     // 6) back to idle
     setStatus("idle")
@@ -192,8 +196,8 @@ export default function ElevenLabsDemoPage() {
     return {
       question,
       transcript,
-      nextAction,
-      analyzerJson,
+      next_action,
+      analyzer_json,
     }
   }
 
@@ -268,8 +272,9 @@ export default function ElevenLabsDemoPage() {
     // Update UI state
     setLastQuestion(result.question)
     setLastTranscript(result.transcript || "(none)")
-    const summary = `${result.nextAction.type}${result.nextAction.nudge ? ` (nudge: ${result.nextAction.nudge})` : ""}`
-    setLastNextAction(summary)
+    setLastNextActionType(result.next_action?.type || "(none)")
+    setLastNextActionNudge(result.next_action?.nudge || null)
+    setLastAnalyzerReady(result.analyzer_json?.readiness || null)
   }
 
   // New: Ask only (no auto listen)
@@ -305,9 +310,10 @@ export default function ElevenLabsDemoPage() {
     }
 
     setStatus("analyzing")
-    const { nextAction } = await analyzeAnswer(transcript)
-    const summary = `${nextAction.type}${nextAction.nudge ? ` (nudge: ${nextAction.nudge})` : ""}`
-    setLastNextAction(summary)
+    const { next_action, analyzer_json } = await analyzeAnswer(transcript)
+    setLastNextActionType(next_action?.type || "(none)")
+    setLastNextActionNudge(next_action?.nudge || null)
+    setLastAnalyzerReady(analyzer_json?.readiness || null)
 
     setStatus("idle")
   }
@@ -434,10 +440,18 @@ export default function ElevenLabsDemoPage() {
           </div>
         </div>
 
-        <div>
+        <div style={{ marginBottom: 12 }}>
           <strong>Last next_action:</strong>
           <div style={{ marginTop: 4, color: "#666", fontFamily: "monospace", fontSize: 13 }}>
-            {lastNextAction || "(none)"}
+            <div>type: {lastNextActionType || "(none)"}</div>
+            <div>nudge: {lastNextActionNudge || "(none)"}</div>
+          </div>
+        </div>
+
+        <div>
+          <strong>Analyzer readiness:</strong>
+          <div style={{ marginTop: 4, color: "#666", fontFamily: "monospace", fontSize: 13 }}>
+            {lastAnalyzerReady || "(unknown)"}
           </div>
         </div>
       </div>
