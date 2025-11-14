@@ -8,6 +8,9 @@ const SNIPPET = "Margins down. Find drivers."
 
 type Status = "idle" | "asking" | "speaking" | "listening" | "analyzing"
 
+// Case phase progression for demo
+type Phase = "opening" | "structuring" | "analysis" | "recommendation" | "done"
+
 type VoiceAdapter = {
   speak: (text: string) => Promise<void>
   listen: () => Promise<string>
@@ -103,6 +106,7 @@ export default function ElevenLabsDemoPage() {
   const [lastNextActionNudge, setLastNextActionNudge] = useState<string | null>(null)
   const [lastAnalyzerReady, setLastAnalyzerReady] = useState<string | null>(null)
   const [turnCount, setTurnCount] = useState(0)
+  const [phase, setPhase] = useState<Phase>("opening")
   const sttRef = useRef<STT | null>(null)
 
   useEffect(() => {
@@ -116,7 +120,7 @@ export default function ElevenLabsDemoPage() {
     }
   }, [])
 
-  async function getInterviewerQuestion(nudge?: string | null): Promise<string> {
+  async function getInterviewerQuestion(opts?: { nudge?: string | null; phase?: Phase; lastQuestion?: string }): Promise<string> {
     const resp = await fetch("/api/voice-tools/interviewer", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -125,7 +129,9 @@ export default function ElevenLabsDemoPage() {
         caseId: CASE_ID,
         section: SECTION,
         snippet: SNIPPET,
-        nudge: nudge || undefined,
+        nudge: opts?.nudge ?? undefined,
+        phase: opts?.phase ?? undefined,
+        last_question: opts?.lastQuestion ?? undefined,
       }),
     })
 
@@ -163,10 +169,36 @@ export default function ElevenLabsDemoPage() {
     analyzer_json?: any
   }
 
+  // Pure helper to compute next phase based on analyzer signals
+  function computeNextPhase(
+    current: Phase,
+    next_action: any | null | undefined,
+    analyzer_json: any | null | undefined
+  ): Phase {
+    if (current === "done") return "done"
+    const readiness: string | undefined = analyzer_json?.readiness
+    const sectionEnd: boolean = analyzer_json?.section_end === true
+    const actionType: string | undefined = next_action?.type
+
+    // opening -> structuring
+    if (current === "opening" && readiness === "good_to_progress") return "structuring"
+    // structuring -> analysis
+    if (current === "structuring" && readiness === "good_to_progress") return "analysis"
+    // analysis -> recommendation
+    if (current === "analysis" && (sectionEnd || actionType === "score" || actionType === "final_score")) {
+      return "recommendation"
+    }
+    // recommendation -> done
+    if (current === "recommendation" && (sectionEnd || actionType === "score" || actionType === "final_score")) {
+      return "done"
+    }
+    return current
+  }
+
   async function runTurn(adapter: VoiceAdapter, nudge?: string | null): Promise<TurnResult> {
     // 1) asking
     setStatus("asking")
-    const question = await getInterviewerQuestion(nudge)
+  const question = await getInterviewerQuestion({ nudge, phase, lastQuestion })
 
     // 2) speaking
     setStatus("speaking")
@@ -281,6 +313,7 @@ export default function ElevenLabsDemoPage() {
       setTurnCount(1)
       const result = await runTurn(adapter)
       updateUIFromResult(result)
+      setPhase((prev) => computeNextPhase(prev, result.next_action, result.analyzer_json))
     } catch (err) {
       console.warn("[elevenlabs-demo] runSingleTurn error:", err)
     } finally {
@@ -296,11 +329,16 @@ export default function ElevenLabsDemoPage() {
       : textOnlyAdapter
     
     let nudge: string | null = null
+    let currentPhase = phase
+    setTurnCount(0)
 
     for (let i = 0; i < maxTurns; i++) {
       setTurnCount(i + 1)
-      const result = await runTurn(adapter, nudge)
+  const result = await runTurn(adapter, nudge)
       updateUIFromResult(result)
+      const nextPhase = computeNextPhase(currentPhase, result.next_action, result.analyzer_json)
+      setPhase(nextPhase)
+      currentPhase = nextPhase
 
       // Check for empty transcript (user didn't speak)
       if (!result.transcript || result.transcript.trim().length === 0) {
@@ -308,8 +346,10 @@ export default function ElevenLabsDemoPage() {
         break
       }
 
-      const nextType = result.next_action?.type
-      const nextNudge = result.next_action?.nudge ?? null
+  const nextType = result.next_action?.type
+  const nextNudge = result.next_action?.nudge ?? null
+  // Always carry forward nudge from latest turn (even if not ask_more) so interviewer can adapt
+  nudge = nextNudge
       const sectionEnd = result.analyzer_json?.section_end === true
 
       // Stop if analyzer says section is done
@@ -326,13 +366,17 @@ export default function ElevenLabsDemoPage() {
 
       // Continue with nudge if ask_more
       if (nextType === "ask_more" || nextType === "ask_more_question") {
-        nudge = nextNudge
-        console.log("[elevenlabs-demo] ask_more with nudge:", nudge)
-        continue
+        console.log("[elevenlabs-demo] ask_more continuing with nudge:", nudge)
+      } else if (nextType === "continue") {
+        // keep nudge cleared if action explicitly continue without guidance
+        if (!nextNudge) nudge = null
       }
 
-      // Otherwise continue without nudge
-      nudge = null
+      // Stop if phase reached done
+      if (currentPhase === "done") {
+        console.log("[elevenlabs-demo] Phase done, stopping loop")
+        break
+      }
     }
 
     setStatus("idle")
@@ -345,7 +389,7 @@ export default function ElevenLabsDemoPage() {
       : textOnlyAdapter
 
     setStatus("asking")
-    const question = await getInterviewerQuestion()
+  const question = await getInterviewerQuestion({ phase, lastQuestion })
     setLastQuestion(question)
 
     setStatus("speaking")
@@ -384,6 +428,7 @@ export default function ElevenLabsDemoPage() {
 
       // Increment turn count (do not reset)
       setTurnCount((prev) => (prev ? prev + 1 : 1))
+      setPhase((prev) => computeNextPhase(prev, next_action, analyzer_json))
     } catch (err) {
       console.warn("[elevenlabs-demo] answerOnly error:", err)
     } finally {
@@ -440,6 +485,7 @@ export default function ElevenLabsDemoPage() {
         {turnCount > 0 && (
           <div style={{ marginTop: 4 }}><strong>Turn:</strong> {turnCount}</div>
         )}
+        <div style={{ marginTop: 4 }}><strong>Phase:</strong> {phase}</div>
       </div>
 
       <div style={{ marginTop: 16 }}>

@@ -5,7 +5,9 @@ import { loadPrompt } from "@/lib/prompts/load";
 
 export async function runInterviewer(state: CaseState, model = "gpt-4o-mini", nudge?: string) {
   const system = loadPrompt("interviewer");
-  const safeNudge = nudge ? `Quick check: ${String(nudge).slice(0, 60)}` : undefined;
+  // Allow richer guidance: trim but keep more context, avoid redundant prefix
+  const cleaned = nudge ? String(nudge).replace(/\s+/g, ' ').trim() : undefined;
+  const safeNudge = cleaned ? cleaned.slice(0, 200) : undefined;
   const userBlocks = buildInterviewerBlocks(state, safeNudge);
   const { json, rawText, usage } = await callJSON<InterviewerJSON>(
     system,
