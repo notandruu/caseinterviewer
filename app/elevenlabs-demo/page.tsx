@@ -277,9 +277,16 @@ export default function ElevenLabsDemoPage() {
       ? elevenLabsAdapter
       : textOnlyAdapter
 
-    setTurnCount(1)
-    const result = await runTurn(adapter)
-    updateUIFromResult(result)
+    try {
+      setTurnCount(1)
+      const result = await runTurn(adapter)
+      updateUIFromResult(result)
+    } catch (err) {
+      console.warn("[elevenlabs-demo] runSingleTurn error:", err)
+    } finally {
+      // Ensure we always return to idle even on error
+      setStatus("idle")
+    }
   }
 
   // Multi-turn loop
@@ -354,22 +361,45 @@ export default function ElevenLabsDemoPage() {
       ? elevenLabsAdapter
       : textOnlyAdapter
 
-    setStatus("listening")
-    const transcript = await adapter.listen()
+    try {
+      setStatus("listening")
+      const transcript = await adapter.listen()
 
-    if (!transcript || transcript.trim().length === 0) {
-      console.warn("[elevenlabs-demo] Empty transcript in answerOnly, skipping analyzer")
+      if (!transcript || transcript.trim().length === 0) {
+        console.warn("[elevenlabs-demo] Empty transcript in answerOnly, skipping analyzer")
+        setLastTranscript("(none)")
+        return
+      }
+
+      setStatus("analyzing")
+      const { next_action, analyzer_json } = await analyzeAnswer(transcript)
+
+      // Reuse existing UI updater with a synthetic TurnResult to preserve lastQuestion
+      updateUIFromResult({
+        question: lastQuestion,
+        transcript,
+        next_action,
+        analyzer_json,
+      })
+
+      // Increment turn count (do not reset)
+      setTurnCount((prev) => (prev ? prev + 1 : 1))
+    } catch (err) {
+      console.warn("[elevenlabs-demo] answerOnly error:", err)
+    } finally {
       setStatus("idle")
-      return
     }
+  }
 
-    setStatus("analyzing")
-    const { next_action, analyzer_json } = await analyzeAnswer(transcript)
-    setLastNextActionType(next_action?.type || "(none)")
-    setLastNextActionNudge(next_action?.nudge || null)
-    setLastAnalyzerReady(analyzer_json?.readiness || null)
-
-    setStatus("idle")
+  // Debug loop handler to de-emphasize auto mode
+  async function handleRunLoop() {
+    try {
+      setStatus("asking")
+      setTurnCount(0)
+      await runLoop(4)
+    } catch (err) {
+      console.warn("[elevenlabs-demo] runLoop error:", err)
+    }
   }
 
   // New: pure mic test, does not hit interviewer/analyzer at all
@@ -443,20 +473,6 @@ export default function ElevenLabsDemoPage() {
         </button>
 
         <button
-          onClick={() => runLoop(4)}
-          disabled={status !== "idle"}
-          style={{
-            padding: "8px 16px",
-            fontSize: 14,
-            cursor: status !== "idle" ? "not-allowed" : "pointer",
-            opacity: status !== "idle" ? 0.6 : 1,
-            fontWeight: 600,
-          }}
-        >
-          Run loop (up to 4 turns)
-        </button>
-
-        <button
           onClick={askOnly}
           disabled={status !== "idle"}
           style={{
@@ -493,6 +509,22 @@ export default function ElevenLabsDemoPage() {
           }}
         >
           Test mic STT
+        </button>
+      </div>
+
+      {/* Debug section to de-emphasize auto loop */}
+      <div style={{ marginTop: 8, opacity: 0.8 }}>
+        <button
+          onClick={handleRunLoop}
+          disabled={status !== "idle"}
+          style={{
+            padding: "6px 12px",
+            fontSize: 13,
+            cursor: status !== "idle" ? "not-allowed" : "pointer",
+            opacity: status !== "idle" ? 0.6 : 1,
+          }}
+        >
+          Debug: Run loop (up to 4 turns)
         </button>
       </div>
 
