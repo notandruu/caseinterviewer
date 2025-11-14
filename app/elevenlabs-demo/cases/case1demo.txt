@@ -1,0 +1,34 @@
+Case Name: Summit Snacks Profit Decline Case
+
+Background  
+Summit Snacks is a mid sized American snack manufacturer headquartered in Denver, Colorado. They sell three main product lines: protein bars, granola bites, and trail mix. Their biggest customers are national grocery chains and convenience stores. Summit has been profitable for the past 7 years and grew revenue by 12 percent annually from 2020 to 2023.
+
+Current Situation  
+In Q3 2025, Summit Snacks reported a 9 percent drop in overall profit even though revenue stayed flat. The CEO wants to understand what is causing the decline and whether it is operational, pricing, or market driven.  
+The company recently opened a new distribution hub in Kansas City to shorten delivery routes for the Midwest and Southeast. They also renegotiated contracts with two logistics partners.
+
+Key Facts  
+- Revenue in Q3 2025: 38 million USD (flat vs Q3 2024).  
+- Overall profit margin dropped from 14 percent to 9 percent.  
+- Protein bars grew 6 percent year over year.  
+- Granola bites declined 4 percent year over year.  
+- Trail mix stayed flat but now has higher return rates due to packaging issues.  
+- The new Kansas City distribution hub required 3.1 million USD in upfront setup.  
+- Transportation costs increased by 18 percent after switching logistics partners.  
+- Customer complaints about late deliveries rose by 22 percent.  
+- No major competitors changed pricing or launched significant products during this period.
+
+Client Objective  
+Identify the root cause of the profit margin decline and recommend actions to restore margins to at least 14 percent within two quarters.
+
+Exhibits (described in text only)  
+Exhibit 1: Cost breakdown Q3 2024 vs Q3 2025  
+Exhibit 2: Product line profitability comparison  
+Exhibit 3: Logistics cost per mile after new distribution hub launch  
+Exhibit 4: Customer complaint categories over time
+
+Notes for Interviewer Bot  
+- Maintain consistent facts across all questions.  
+- Do not invent new financial numbers unless explicitly asked to estimate.  
+- When revealing data, rely on the descriptions above.  
+- If asked about the Kansas City hub or logistics, reference the cost increase and late delivery issues.  

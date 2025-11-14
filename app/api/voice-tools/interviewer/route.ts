@@ -2,10 +2,31 @@ export const runtime = "nodejs";
 
 import { NextRequest, NextResponse } from "next/server";
 import { performance } from "node:perf_hooks";
+import fs from "fs";
+import path from "path";
 import { getCaseStateFromDB, persistInterviewerTurn } from "@/lib/supabase/queries";
 import { resolveCaseStyle } from "@/lib/compose/style";
 import { runInterviewer } from "@/lib/agents/interviewer";
 import type { CaseState } from "@/lib/compose/state";
+
+function loadCaseText(caseId?: string): string {
+  try {
+    // For now we hardcode the demo case mapping
+    if (caseId === "00000000-0000-0000-0000-000000000000") {
+      const filePath = path.join(
+        process.cwd(),
+        "app",
+        "elevenlabs-demo",
+        "cases",
+        "case1demo.txt"
+      );
+      return fs.readFileSync(filePath, "utf8");
+    }
+  } catch (err) {
+    console.warn("[interviewer] failed to read case file:", err);
+  }
+  return "";
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -87,18 +108,20 @@ export async function POST(req: NextRequest) {
     if (!isDemo && style) {
       (state as any).caseStyle = resolveCaseStyle({ override: style ?? null });
     }
-    // Build dynamic system prompt with phase + nudge context (demo mode only for now)
-    const dynamicPrefix = `Case context:\n${snippet || "(no snippet)"}\n\n${phaseInstruction(phase)}\n${nudgeInstruction(rawNudge)}\n\nRules:\n- Ask exactly one question.\n- Keep to 1-2 sentences.\n- Do not solve the case.\n- Be concise and professional.`;
+
+    // Load case background from file if available
+    const caseText = loadCaseText(caseId);
 
     // Combine phase & nudge guidance into a compact nudge string for the interviewer prompt.
     const combinedNudge = [
+      `Case background:\n${caseText || snippet || "Margins are declining for a client. Understand why and what to do."}`,
       phaseInstruction(phase),
       last_question ? `Do not repeat: \"${String(last_question).slice(0, 120)}\"` : "",
       nudgeInstruction(rawNudge)
     ]
       .filter(Boolean)
-      .join(' ')
-      .slice(0, 200); // allow a bit more room than original 60 without going overboard
+      .join('\n\n')
+      .slice(0, 400); // expanded for richer case context
 
     const { json, usage, rawText } = await runInterviewer(state, "gpt-4o-mini", combinedNudge);
 
