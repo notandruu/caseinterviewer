@@ -102,6 +102,7 @@ export default function ElevenLabsDemoPage() {
   const [lastNextActionType, setLastNextActionType] = useState("")
   const [lastNextActionNudge, setLastNextActionNudge] = useState<string | null>(null)
   const [lastAnalyzerReady, setLastAnalyzerReady] = useState<string | null>(null)
+  const [turnCount, setTurnCount] = useState(0)
   const sttRef = useRef<STT | null>(null)
 
   useEffect(() => {
@@ -261,20 +262,73 @@ export default function ElevenLabsDemoPage() {
     },
   }
 
+  // Helper to update UI state from TurnResult
+  function updateUIFromResult(result: TurnResult) {
+    setLastQuestion(result.question)
+    setLastTranscript(result.transcript || "(none)")
+    setLastNextActionType(result.next_action?.type || "(none)")
+    setLastNextActionNudge(result.next_action?.nudge || null)
+    setLastAnalyzerReady(result.analyzer_json?.readiness || null)
+  }
+
   // Existing "one button" flow (refactored to use runTurn)
   async function runSingleTurn() {
     const adapter: VoiceAdapter = useElevenLabs
       ? elevenLabsAdapter
       : textOnlyAdapter
 
+    setTurnCount(1)
     const result = await runTurn(adapter)
+    updateUIFromResult(result)
+  }
 
-    // Update UI state
-    setLastQuestion(result.question)
-    setLastTranscript(result.transcript || "(none)")
-    setLastNextActionType(result.next_action?.type || "(none)")
-    setLastNextActionNudge(result.next_action?.nudge || null)
-    setLastAnalyzerReady(result.analyzer_json?.readiness || null)
+  // Multi-turn loop
+  async function runLoop(maxTurns = 4) {
+    const adapter: VoiceAdapter = useElevenLabs
+      ? elevenLabsAdapter
+      : textOnlyAdapter
+    
+    let nudge: string | null = null
+
+    for (let i = 0; i < maxTurns; i++) {
+      setTurnCount(i + 1)
+      const result = await runTurn(adapter, nudge)
+      updateUIFromResult(result)
+
+      // Check for empty transcript (user didn't speak)
+      if (!result.transcript || result.transcript.trim().length === 0) {
+        console.log("[elevenlabs-demo] Empty transcript, stopping loop")
+        break
+      }
+
+      const nextType = result.next_action?.type
+      const nextNudge = result.next_action?.nudge ?? null
+      const sectionEnd = result.analyzer_json?.section_end === true
+
+      // Stop if analyzer says section is done
+      if (sectionEnd) {
+        console.log("[elevenlabs-demo] section_end=true, stopping loop")
+        break
+      }
+
+      // Stop if analyzer wants to score
+      if (nextType === "score" || nextType === "final_score") {
+        console.log("[elevenlabs-demo] next_action.type is score, stopping loop")
+        break
+      }
+
+      // Continue with nudge if ask_more
+      if (nextType === "ask_more" || nextType === "ask_more_question") {
+        nudge = nextNudge
+        console.log("[elevenlabs-demo] ask_more with nudge:", nudge)
+        continue
+      }
+
+      // Otherwise continue without nudge
+      nudge = null
+    }
+
+    setStatus("idle")
   }
 
   // New: Ask only (no auto listen)
@@ -353,6 +407,9 @@ export default function ElevenLabsDemoPage() {
 
       <div style={{ marginTop: 16, padding: 12, background: "#f5f5f5", borderRadius: 4 }}>
         <div><strong>Status:</strong> {status}</div>
+        {turnCount > 0 && (
+          <div style={{ marginTop: 4 }}><strong>Turn:</strong> {turnCount}</div>
+        )}
       </div>
 
       <div style={{ marginTop: 16 }}>
@@ -383,6 +440,20 @@ export default function ElevenLabsDemoPage() {
           }}
         >
           Ask once (auto)
+        </button>
+
+        <button
+          onClick={() => runLoop(4)}
+          disabled={status !== "idle"}
+          style={{
+            padding: "8px 16px",
+            fontSize: 14,
+            cursor: status !== "idle" ? "not-allowed" : "pointer",
+            opacity: status !== "idle" ? 0.6 : 1,
+            fontWeight: 600,
+          }}
+        >
+          Run loop (up to 4 turns)
         </button>
 
         <button
