@@ -165,7 +165,7 @@ export default function ElevenLabsDemoPage() {
     }
   }, [])
 
-  async function getInterviewerQuestion(opts?: { nudge?: string | null; phase?: Phase; lastQuestion?: string; lastTranscript?: string | null; analyzerReady?: string | null; nextActionType?: string | null }): Promise<string> {
+  async function getInterviewerQuestion(opts?: { nudge?: string | null; phase?: Phase; lastQuestion?: string; lastTranscript?: string | null; analyzerReady?: string | null; nextActionType?: string | null; turnCount?: number }): Promise<string> {
     const resp = await fetch("/api/voice-tools/interviewer", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -180,6 +180,7 @@ export default function ElevenLabsDemoPage() {
         last_transcript: opts?.lastTranscript ?? undefined,
         analyzer_readiness: opts?.analyzerReady ?? undefined,
         next_action_type: opts?.nextActionType ?? undefined,
+        turn_count: opts?.turnCount ?? undefined,
       }),
     })
 
@@ -254,6 +255,8 @@ export default function ElevenLabsDemoPage() {
     analyzer_json: any | null | undefined
   ): Phase {
     if (current === "done") return "done"
+    // If we've reached closing, end the interview on next step regardless of analyzer signals
+    if (current === "closing") return "done"
     
     const readiness: string | undefined = analyzer_json?.readiness
     const sectionEnd: boolean = analyzer_json?.section_end === true
@@ -290,10 +293,7 @@ export default function ElevenLabsDemoPage() {
       return "closing"
     }
     
-    // closing → done (after final remarks)
-    if (current === "closing" && (sectionEnd || actionType === "score" || actionType === "final_score")) {
-      return "done"
-    }
+    // closing → done handled above as a safe default
     
     // Never go backwards, stay in current phase if no transition criteria met
     return current
@@ -302,7 +302,7 @@ export default function ElevenLabsDemoPage() {
   async function runTurn(adapter: VoiceAdapter, nudge?: string | null): Promise<TurnResult> {
     // 1) asking
     setStatus("asking")
-  const question = await getInterviewerQuestion({ nudge, phase, lastQuestion, lastTranscript, analyzerReady: lastAnalyzerReady, nextActionType: lastNextActionType })
+  const question = await getInterviewerQuestion({ nudge, phase, lastQuestion, lastTranscript, analyzerReady: lastAnalyzerReady, nextActionType: lastNextActionType, turnCount })
 
     // 2) speaking
     setStatus("speaking")
@@ -552,6 +552,12 @@ export default function ElevenLabsDemoPage() {
     }
   }
 
+  // Debug: Jump directly to closing phase for testing
+  function jumpToClosing() {
+    setPhase("closing")
+    console.log("[elevenlabs-demo] Jumped to closing phase for testing")
+  }
+
   // New: pure mic test, does not hit interviewer/analyzer at all
   async function testMicSTT() {
     const stt = sttRef.current
@@ -681,6 +687,19 @@ export default function ElevenLabsDemoPage() {
           }}
         >
           Debug: Run loop (up to 4 turns)
+        </button>
+        <button
+          onClick={jumpToClosing}
+          disabled={status !== "idle"}
+          style={{
+            padding: "6px 12px",
+            fontSize: 13,
+            marginLeft: 8,
+            cursor: status !== "idle" ? "not-allowed" : "pointer",
+            opacity: status !== "idle" ? 0.6 : 1,
+          }}
+        >
+          Debug: Jump to Closing
         </button>
       </div>
 

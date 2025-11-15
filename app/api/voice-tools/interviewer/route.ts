@@ -127,6 +127,66 @@ export async function POST(req: NextRequest) {
     // Load case background from file if available
     const caseText = loadCaseText(caseId);
 
+    // If we're in done phase, return a final summary with goodbye and dynamic feedback
+    if (phase === "done") {
+      const turnCount = typeof body?.turn_count === 'number' ? body.turn_count : 0;
+      const hadTranscript = !!last_transcript;
+      const readiness = analyzer_readiness || "unknown";
+      
+      // Generate constructive feedback based on conversation signals
+      const feedback = generateFeedback({
+        turnCount,
+        hadTranscript,
+        readiness,
+        lastTranscript: last_transcript,
+      });
+      
+      return NextResponse.json({
+        question: `The interview is complete. ${feedback} Thank you for your work today. Goodbye!`,
+        tool_call: "none",
+        tool_arg: null,
+        end_section: true,
+        via: isDemo ? "demo" : "db",
+      })
+    }
+    
+    function generateFeedback(opts: { turnCount: number; hadTranscript: boolean; readiness: string; lastTranscript?: string | null }): string {
+      const { turnCount, hadTranscript, readiness, lastTranscript } = opts;
+      const parts: string[] = [];
+      
+      // Turn count feedback
+      if (turnCount >= 5) {
+        parts.push("You engaged deeply with the case and explored multiple angles.");
+      } else if (turnCount >= 3) {
+        parts.push("You covered key areas of the case effectively.");
+      } else if (turnCount > 0) {
+        parts.push("You touched on important aspects, though more exploration could strengthen your analysis.");
+      }
+      
+      // Readiness/clarity feedback
+      if (readiness === "good_to_progress") {
+        parts.push("Your responses were clear and structured.");
+      } else if (readiness === "needs_clarification") {
+        parts.push("Some of your points could benefit from more specificity.");
+      }
+      
+      // Engagement feedback
+      if (hadTranscript && lastTranscript && lastTranscript.trim().length > 0) {
+        if (lastTranscript.toLowerCase().includes("goodbye") || lastTranscript.toLowerCase().includes("thank")) {
+          parts.push("You closed professionally.");
+        } else {
+          parts.push("You stayed engaged throughout.");
+        }
+      }
+      
+      // Default if no parts
+      if (parts.length === 0) {
+        parts.push("Your performance showed solid analytical thinking.");
+      }
+      
+      return parts.join(" ");
+    }
+
     // For greeting phase, don't include case details yet
     const includeCaseBackground = phase !== "greeting";
     const trimmedCaseText = typeof caseText === "string" ? caseText.trim() : "";
