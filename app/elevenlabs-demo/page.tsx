@@ -40,17 +40,26 @@ function makeBrowserSTT(): STT {
   const isSupported = !!SR
   let rec: any = null
   let finalText = ""
+  let interimAccum = ""
+  let lastResultTs = 0
+
+  const MAX_DURATION_MS = 45000 // allow up to 45s continuous speech
+  const SILENCE_MS = 5000 // if no results for 5s, end early
+  let durationTimer: any = null
+  let silenceTimer: any = null
 
   function start(onFinal: (text: string) => void) {
     if (!SR) {
       console.warn("[elevenlabs-demo] SpeechRecognition not available on window")
       return
     }
-    finalText = ""
+  finalText = ""
+  interimAccum = ""
     rec = new SR()
     rec.lang = "en-US"
     rec.interimResults = true
-    rec.continuous = false
+  // continuous true helps capture longer utterances
+  rec.continuous = true
 
     console.log("[elevenlabs-demo] STT.start called")
 
@@ -71,10 +80,18 @@ function makeBrowserSTT(): STT {
       }
       if (interim) {
         console.log("[elevenlabs-demo] STT interim:", interim)
+        interimAccum = interim // overwrite with latest interim snapshot
       }
       if (finalText) {
         console.log("[elevenlabs-demo] STT final so far:", finalText)
       }
+      lastResultTs = Date.now()
+      // reset silence timer
+      if (silenceTimer) clearTimeout(silenceTimer)
+      silenceTimer = setTimeout(() => {
+        console.log("[elevenlabs-demo] STT silence timeout reached, stopping")
+        try { rec.stop() } catch {}
+      }, SILENCE_MS)
     }
 
     rec.onerror = (err: any) => {
@@ -83,12 +100,28 @@ function makeBrowserSTT(): STT {
     }
 
     rec.onend = () => {
-      console.log("[elevenlabs-demo] STT onend, finalText:", finalText.trim())
-      onFinal(finalText.trim())
+      if (durationTimer) clearTimeout(durationTimer)
+      if (silenceTimer) clearTimeout(silenceTimer)
+      const cleanedFinal = finalText.trim()
+      const fallback = interimAccum.trim()
+      const out = cleanedFinal || fallback
+      console.log("[elevenlabs-demo] STT onend output:", out)
+      onFinal(out)
     }
 
     try {
       rec.start()
+      lastResultTs = Date.now()
+      // duration hard stop
+      durationTimer = setTimeout(() => {
+        console.log("[elevenlabs-demo] STT max duration reached, stopping")
+        try { rec.stop() } catch {}
+      }, MAX_DURATION_MS)
+      // initial silence timer
+      silenceTimer = setTimeout(() => {
+        console.log("[elevenlabs-demo] STT initial silence timeout reached, stopping")
+        try { rec.stop() } catch {}
+      }, SILENCE_MS)
     } catch (err) {
       console.error("[elevenlabs-demo] STT start threw:", err)
     }
@@ -102,6 +135,8 @@ function makeBrowserSTT(): STT {
       console.warn("[elevenlabs-demo] STT.stop error:", e)
     }
     rec = null
+    if (durationTimer) clearTimeout(durationTimer)
+    if (silenceTimer) clearTimeout(silenceTimer)
   }
 
   return { start, stop, isSupported }
@@ -333,17 +368,18 @@ export default function ElevenLabsDemoPage() {
         stt.start((text) => {
           if (resolved) return
           resolved = true
-          console.log("[elevenlabs-demo] STT final callback:", text)
+          console.log("[elevenlabs-demo] STT final callback (aggregated):", text)
           resolve(text)
         })
-        // safety stop after 10 seconds to be generous
+        // fallback hard timeout beyond internal max duration (slightly bigger than STT's own)
+        const HARD_TIMEOUT_MS = 47000
         setTimeout(() => {
           if (resolved) return
-          console.log("[elevenlabs-demo] STT timeout reached, stopping")
+          console.log("[elevenlabs-demo] HARD timeout reached, forcing stop")
           stt.stop()
           resolved = true
           resolve("")
-        }, 10000)
+        }, HARD_TIMEOUT_MS)
       })
       setLastTranscript(transcript || "(none)")
       return transcript
