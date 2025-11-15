@@ -7,7 +7,7 @@ export async function runInterviewer(state: CaseState, model = "gpt-4o-mini", nu
   const system = loadPrompt("interviewer");
   // Allow richer guidance: trim but keep more context, avoid redundant prefix
   const cleaned = nudge ? String(nudge).replace(/\s+/g, ' ').trim() : undefined;
-  const safeNudge = cleaned ? cleaned.slice(0, 200) : undefined;
+  const safeNudge = cleaned ? cleaned.slice(0, 600) : undefined;
   const userBlocks = buildInterviewerBlocks(state, safeNudge);
   const { json, rawText, usage } = await callJSON<InterviewerJSON>(
     system,

@@ -8,8 +8,18 @@ const SNIPPET = "Margins down. Find drivers."
 
 type Status = "idle" | "asking" | "speaking" | "listening" | "analyzing"
 
-// Case phase progression for demo
-type Phase = "opening" | "structuring" | "analysis" | "recommendation" | "done"
+// Case phase progression for demo (expanded to match standard consulting case structure)
+type Phase = 
+  | "greeting" 
+  | "case_prompt" 
+  | "clarification" 
+  | "framework" 
+  | "exploration" 
+  | "quant_check" 
+  | "creative_check" 
+  | "synthesis" 
+  | "closing" 
+  | "done"
 
 type VoiceAdapter = {
   speak: (text: string) => Promise<void>
@@ -106,7 +116,7 @@ export default function ElevenLabsDemoPage() {
   const [lastNextActionNudge, setLastNextActionNudge] = useState<string | null>(null)
   const [lastAnalyzerReady, setLastAnalyzerReady] = useState<string | null>(null)
   const [turnCount, setTurnCount] = useState(0)
-  const [phase, setPhase] = useState<Phase>("opening")
+  const [phase, setPhase] = useState<Phase>("greeting")
   const sttRef = useRef<STT | null>(null)
 
   useEffect(() => {
@@ -120,7 +130,7 @@ export default function ElevenLabsDemoPage() {
     }
   }, [])
 
-  async function getInterviewerQuestion(opts?: { nudge?: string | null; phase?: Phase; lastQuestion?: string }): Promise<string> {
+  async function getInterviewerQuestion(opts?: { nudge?: string | null; phase?: Phase; lastQuestion?: string; lastTranscript?: string | null; analyzerReady?: string | null; nextActionType?: string | null }): Promise<string> {
     const resp = await fetch("/api/voice-tools/interviewer", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -128,10 +138,13 @@ export default function ElevenLabsDemoPage() {
         demo: true,
         caseId: CASE_ID,
         section: SECTION,
-        snippet: SNIPPET,
+        // omit snippet to avoid bias; server provides background when needed
         nudge: opts?.nudge ?? undefined,
         phase: opts?.phase ?? undefined,
         last_question: opts?.lastQuestion ?? undefined,
+        last_transcript: opts?.lastTranscript ?? undefined,
+        analyzer_readiness: opts?.analyzerReady ?? undefined,
+        next_action_type: opts?.nextActionType ?? undefined,
       }),
     })
 
@@ -169,6 +182,36 @@ export default function ElevenLabsDemoPage() {
     analyzer_json?: any
   }
 
+  // Helper to get human-friendly phase label
+  function getPhaseLabel(p: Phase): string {
+    const labels: Record<Phase, string> = {
+      greeting: "Greeting",
+      case_prompt: "Case Prompt",
+      clarification: "Clarification",
+      framework: "Framework",
+      exploration: "Exploration",
+      quant_check: "Quantitative Check",
+      creative_check: "Creative Check",
+      synthesis: "Synthesis",
+      closing: "Closing",
+      done: "Complete"
+    }
+    return labels[p] || p
+  }
+
+  // Helper to get phase hint (optional guidance for candidate)
+  function getPhaseHint(p: Phase): string | null {
+    const hints: Partial<Record<Phase, string>> = {
+      clarification: "Ask clarifying questions about the case",
+      framework: "Outline your structure or framework",
+      exploration: "Dive into your chosen branch of analysis",
+      quant_check: "Work through the quantitative problem",
+      creative_check: "Handle the curveball or edge case",
+      synthesis: "Synthesize findings into a recommendation"
+    }
+    return hints[p] || null
+  }
+
   // Pure helper to compute next phase based on analyzer signals
   function computeNextPhase(
     current: Phase,
@@ -176,29 +219,55 @@ export default function ElevenLabsDemoPage() {
     analyzer_json: any | null | undefined
   ): Phase {
     if (current === "done") return "done"
+    
     const readiness: string | undefined = analyzer_json?.readiness
     const sectionEnd: boolean = analyzer_json?.section_end === true
     const actionType: string | undefined = next_action?.type
 
-    // opening -> structuring
-    if (current === "opening" && readiness === "good_to_progress") return "structuring"
-    // structuring -> analysis
-    if (current === "structuring" && readiness === "good_to_progress") return "analysis"
-    // analysis -> recommendation
-    if (current === "analysis" && (sectionEnd || actionType === "score" || actionType === "final_score")) {
-      return "recommendation"
+    // greeting → case_prompt (automatic after first turn)
+    if (current === "greeting") return "case_prompt"
+    
+    // case_prompt → clarification (automatic after presenting case)
+    if (current === "case_prompt") return "clarification"
+    
+    // clarification → framework (when candidate ready to structure)
+    if (current === "clarification" && readiness === "good_to_progress") return "framework"
+    
+    // framework → exploration (when framework established)
+    if (current === "framework" && readiness === "good_to_progress") return "exploration"
+    
+    // exploration → quant_check (on explicit signal or after sufficient exploration)
+    if (current === "exploration") {
+      if (actionType === "insert_quant_check") return "quant_check"
+      if (readiness === "good_to_progress") return "quant_check" // fallback heuristic
     }
-    // recommendation -> done
-    if (current === "recommendation" && (sectionEnd || actionType === "score" || actionType === "final_score")) {
+    
+    // quant_check → creative_check (after quantitative work complete)
+    if (current === "quant_check" && readiness === "good_to_progress") return "creative_check"
+    
+    // creative_check → synthesis (on explicit signal)
+    if (current === "creative_check") {
+      if (actionType === "ready_to_synthesize" || readiness === "good_to_progress") return "synthesis"
+    }
+    
+    // synthesis → closing (when synthesis complete or scoring triggered)
+    if (current === "synthesis" && (sectionEnd || actionType === "score" || actionType === "final_score")) {
+      return "closing"
+    }
+    
+    // closing → done (after final remarks)
+    if (current === "closing" && (sectionEnd || actionType === "score" || actionType === "final_score")) {
       return "done"
     }
+    
+    // Never go backwards, stay in current phase if no transition criteria met
     return current
   }
 
   async function runTurn(adapter: VoiceAdapter, nudge?: string | null): Promise<TurnResult> {
     // 1) asking
     setStatus("asking")
-  const question = await getInterviewerQuestion({ nudge, phase, lastQuestion })
+  const question = await getInterviewerQuestion({ nudge, phase, lastQuestion, lastTranscript, analyzerReady: lastAnalyzerReady, nextActionType: lastNextActionType })
 
     // 2) speaking
     setStatus("speaking")
@@ -485,7 +554,12 @@ export default function ElevenLabsDemoPage() {
         {turnCount > 0 && (
           <div style={{ marginTop: 4 }}><strong>Turn:</strong> {turnCount}</div>
         )}
-        <div style={{ marginTop: 4 }}><strong>Phase:</strong> {phase}</div>
+        <div style={{ marginTop: 4 }}><strong>Phase:</strong> {getPhaseLabel(phase)}</div>
+        {getPhaseHint(phase) && (
+          <div style={{ marginTop: 4, fontSize: 14, color: "#555", fontStyle: "italic" }}>
+            {getPhaseHint(phase)}
+          </div>
+        )}
       </div>
 
       <div style={{ marginTop: 16 }}>

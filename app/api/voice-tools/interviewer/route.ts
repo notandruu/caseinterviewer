@@ -47,23 +47,36 @@ export async function POST(req: NextRequest) {
       firm,
       vars,
       last_question,
+      last_transcript,
+      analyzer_readiness,
+      next_action_type,
     } = body || {};
     const isDemo = demo === true || (attemptId && String(attemptId).startsWith("demo-"));
 
     // Normalize nudge text (limit length for safety)
     const rawNudge = nudge ? String(nudge).slice(0, 120) : undefined;
 
-    // Phase and nudge specific instructions
+    // Phase and nudge specific instructions (expanded to 10-phase model)
     function phaseInstruction(p?: string): string {
       switch (p) {
-        case "opening":
-          return "You are at the opening of the case. Briefly present the business situation and then ask an open clarifying question that invites exploration.";
-        case "structuring":
-          return "You are in the structuring phase. Ask the candidate to outline a clear, MECE structure or issue tree for this problem.";
-        case "analysis":
-          return "You are in the analysis phase. Ask a focused question about drivers, data, or a specific calculation. Keep to one or two sentences.";
-        case "recommendation":
-          return "You are in the recommendation phase. Ask the candidate to summarise their recommendation including rationale, key risks, and next steps.";
+        case "greeting":
+          return "GREETING ONLY: Say hello, introduce yourself as the interviewer, and tell them you'll present a business case. Do NOT present the case yet. 1-2 sentences max. Example: 'Hi, I'm your interviewer today. I'll present a business case and then we'll work through it together.'";
+        case "case_prompt":
+          return "CASE PRESENTATION: In a single output string, first present the business situation in 1–2 sentences using the Case background below, then end with exactly: 'What are your initial thoughts?' Keep it concise and neutral.";
+        case "clarification":
+          return "You are in the clarification phase. Answer the candidate's clarifying questions directly and factually. If they seem ready to structure, acknowledge it.";
+        case "framework":
+          return "You are in the framework phase. Ask the candidate to outline their structure or framework for analyzing the case. Listen for MECE thinking and logical flow.";
+        case "exploration":
+          return "You are in the exploration phase. Guide the candidate deeper into their chosen branch of analysis. Ask about drivers, hypotheses, or what data they would want to see.";
+        case "quant_check":
+          return "You are in the quantitative check phase. Present a quantitative problem or data exhibit. Ask the candidate to interpret it, calculate something, or draw insights from the numbers.";
+        case "creative_check":
+          return "You are in the creative check phase. Present a curveball, edge case, or creative challenge that tests adaptability. This could be a constraint, new information, or a 'what if' scenario.";
+        case "synthesis":
+          return "You are in the synthesis phase. Ask the candidate to synthesize everything and form a recommendation. They should tie together their structure, findings, and quantitative insights.";
+        case "closing":
+          return "You are closing the case. Ask if they have final thoughts or questions. Acknowledge their work and wrap up professionally.";
         case "done":
           return "The case is complete. If forced to ask, acknowledge completion politely.";
         default:
@@ -93,6 +106,7 @@ export async function POST(req: NextRequest) {
         objective: objective ?? undefined,
         industry: industry ?? undefined,
         last_question: last_question ?? null,
+        last_transcript: last_transcript ?? null,
         snippet: snippet ?? null,
         rubric: rubric ?? null,
         caseStyle: demoCaseStyle,
@@ -112,10 +126,22 @@ export async function POST(req: NextRequest) {
     // Load case background from file if available
     const caseText = loadCaseText(caseId);
 
+    // For greeting phase, don't include case details yet
+    const includeCaseBackground = phase !== "greeting";
+    
     // Combine phase & nudge guidance into a compact nudge string for the interviewer prompt.
+    const wantsNumber = typeof last_transcript === 'string' && /\b(how much|how many|what (is|was) the|by how (much|many))\b/i.test(last_transcript);
+
     const combinedNudge = [
-      `Case background:\n${caseText || snippet || "Margins are declining for a client. Understand why and what to do."}`,
+      last_transcript ? `Candidate latest request:\n${String(last_transcript).slice(0, 240)}\nPriority: Address this request directly before introducing new topics. Do not pivot back to generic drivers unless explicitly asked.` : "",
+      includeCaseBackground ? `Case background:\n${caseText || snippet || "A company faces a business challenge. Present the situation succinctly and proceed."}` : "",
       phaseInstruction(phase),
+      phase === "case_prompt" ? "OUTPUT FORMAT: Start with 'Case:' followed by a 1–2 sentence summary using the Case background, then append ' What are your initial thoughts?' Do not ask generic approach questions without presenting the case." : "",
+      analyzer_readiness === 'needs_clarification' && last_transcript
+        ? "Analyzer: needs_clarification. Ask one clarifying question specifically about the candidate's latest request."
+        : "",
+      wantsNumber ? "Candidate is requesting a specific figure. Ask ONE scoping question to pin down: the exact metric definition (e.g., absolute percentage change vs percentage points) and the time window (e.g., Q3 vs Q2 or Q3 YoY)." : "",
+      next_action_type ? `LastNextActionType: ${next_action_type}` : "",
       last_question ? `Do not repeat: \"${String(last_question).slice(0, 120)}\"` : "",
       nudgeInstruction(rawNudge)
     ]
@@ -123,7 +149,12 @@ export async function POST(req: NextRequest) {
       .join('\n\n')
       .slice(0, 400); // expanded for richer case context
 
-    const { json, usage, rawText } = await runInterviewer(state, "gpt-4o-mini", combinedNudge);
+    // Avoid leaking case-specific snippet during greeting
+    const stateForPrompt: CaseState = phase === "greeting"
+      ? { ...state, snippet: null, last_question: null }
+      : state;
+
+    const { json, usage, rawText } = await runInterviewer(stateForPrompt, "gpt-4o-mini", combinedNudge);
 
     if (!json?.question) {
       // only persist in real mode

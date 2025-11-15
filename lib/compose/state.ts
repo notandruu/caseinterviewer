@@ -8,6 +8,7 @@ export type CaseState = {
   industry?: string;
   objective?: string;
   last_question?: string | null;
+  last_transcript?: string | null;
   snippet?: string | null;
   rubric?: {
     categories: { name: string; weight: number; desc?: string }[];
@@ -22,6 +23,7 @@ case_id: ${s.caseId}
 section: ${s.currentSection}
 style: ${s.caseStyle}
 objective: ${s.objective ?? ""}`,
+    s.last_transcript ? `LastTranscript:\n${s.last_transcript}` : "LastTranscript: none",
     s.snippet ? `Snippet:\n${s.snippet}` : "Snippet: none",
     s.last_question ? `LastQuestion:\n${s.last_question}` : "LastQuestion: none",
     nudge ? `Nudge:\n${nudge}` : "Nudge: none",
