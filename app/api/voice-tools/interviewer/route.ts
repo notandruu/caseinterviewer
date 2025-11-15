@@ -110,6 +110,7 @@ export async function POST(req: NextRequest) {
         snippet: snippet ?? null,
         rubric: rubric ?? null,
         caseStyle: demoCaseStyle,
+        caseBackground: null,
       };
     } else {
       if (!attemptId) {
@@ -128,31 +129,44 @@ export async function POST(req: NextRequest) {
 
     // For greeting phase, don't include case details yet
     const includeCaseBackground = phase !== "greeting";
+    const trimmedCaseText = typeof caseText === "string" ? caseText.trim() : "";
+    const snippetForContext = typeof state.snippet === "string" ? state.snippet : "";
+    const fallbackBackground = "A company faces a business challenge. Present the situation succinctly and proceed.";
+    const backgroundSource = includeCaseBackground
+      ? (trimmedCaseText.length > 0
+          ? trimmedCaseText
+          : (snippetForContext.trim().length > 0 ? snippetForContext : fallbackBackground))
+      : null;
+    const promptBackground = backgroundSource ? backgroundSource.slice(0, 3200) : null;
     
     // Combine phase & nudge guidance into a compact nudge string for the interviewer prompt.
     const wantsNumber = typeof last_transcript === 'string' && /\b(how much|how many|what (is|was) the|by how (much|many))\b/i.test(last_transcript);
 
     const combinedNudge = [
-      last_transcript ? `Candidate latest request:\n${String(last_transcript).slice(0, 240)}\nPriority: Address this request directly before introducing new topics. Do not pivot back to generic drivers unless explicitly asked.` : "",
-      includeCaseBackground ? `Case background:\n${caseText || snippet || "A company faces a business challenge. Present the situation succinctly and proceed."}` : "",
+      last_transcript
+        ? `Candidate latest request:\n${String(last_transcript).slice(0, 400)}\nPriority: Address this request directly before introducing new topics. Do not pivot back to generic drivers unless explicitly asked.`
+        : "",
       phaseInstruction(phase),
-      phase === "case_prompt" ? "OUTPUT FORMAT: Start with 'Case:' followed by a 1–2 sentence summary using the Case background, then append ' What are your initial thoughts?' Do not ask generic approach questions without presenting the case." : "",
+      phase === "case_prompt"
+        ? "OUTPUT FORMAT: Start with 'Case:' followed by a 1–2 sentence summary using the Case background, then append ' What are your initial thoughts?' Do not ask generic approach questions without presenting the case."
+        : "",
       analyzer_readiness === 'needs_clarification' && last_transcript
         ? "Analyzer: needs_clarification. Ask one clarifying question specifically about the candidate's latest request."
         : "",
-      wantsNumber ? "Candidate is requesting a specific figure. Ask ONE scoping question to pin down: the exact metric definition (e.g., absolute percentage change vs percentage points) and the time window (e.g., Q3 vs Q2 or Q3 YoY)." : "",
+      wantsNumber
+        ? "Candidate is requesting a specific figure. Ask ONE scoping question to pin down: the exact metric definition (e.g., absolute percentage change vs percentage points) and the time window (e.g., Q3 vs Q2 or Q3 YoY)."
+        : "",
       next_action_type ? `LastNextActionType: ${next_action_type}` : "",
       last_question ? `Do not repeat: \"${String(last_question).slice(0, 120)}\"` : "",
-      nudgeInstruction(rawNudge)
+      nudgeInstruction(rawNudge),
     ]
       .filter(Boolean)
-      .join('\n\n')
-      .slice(0, 400); // expanded for richer case context
+      .join("\n\n");
 
     // Avoid leaking case-specific snippet during greeting
     const stateForPrompt: CaseState = phase === "greeting"
-      ? { ...state, snippet: null, last_question: null }
-      : state;
+      ? { ...state, snippet: null, last_question: null, caseBackground: null }
+      : { ...state, caseBackground: promptBackground };
 
     const { json, usage, rawText } = await runInterviewer(stateForPrompt, "gpt-4o-mini", combinedNudge);
 
