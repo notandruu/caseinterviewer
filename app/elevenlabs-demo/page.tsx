@@ -143,7 +143,7 @@ function makeBrowserSTT(): STT {
 }
 
 export default function ElevenLabsDemoPage() {
-  const [useElevenLabs, setUseElevenLabs] = useState(false)
+  const [useElevenLabs, setUseElevenLabs] = useState(true)
   const [status, setStatus] = useState<Status>("idle")
   const [lastQuestion, setLastQuestion] = useState("")
   const [lastTranscript, setLastTranscript] = useState("")
@@ -614,92 +614,51 @@ export default function ElevenLabsDemoPage() {
           Use ElevenLabs TTS + Browser STT
         </label>
         {!sttRef.current?.isSupported && (
-          <div style={{ marginTop: 8, color: "#b00" }}>
-            Browser STT not supported here. Use Chrome desktop and allow mic permission.
+          <div style={{ marginTop: 8}}>
+            Use Chrome desktop and allow mic permission.
           </div>
         )}
       </div>
 
-      <div style={{ marginTop: 16, display: "flex", gap: 8, flexWrap: "wrap" }}>
-        <button
-          onClick={runSingleTurn}
-          disabled={status !== "idle"}
-          style={{
-            padding: "8px 16px",
-            fontSize: 14,
-            cursor: status !== "idle" ? "not-allowed" : "pointer",
-            opacity: status !== "idle" ? 0.6 : 1,
-          }}
-        >
-          Ask once (auto)
-        </button>
-
+      <div style={{ marginTop: 24, display: "flex", gap: 12, flexWrap: "wrap" }}>
         <button
           onClick={askOnly}
           disabled={status !== "idle"}
           style={{
-            padding: "8px 16px",
-            fontSize: 14,
+            padding: "12px 24px",
+            fontSize: 16,
+            fontWeight: 600,
             cursor: status !== "idle" ? "not-allowed" : "pointer",
             opacity: status !== "idle" ? 0.6 : 1,
+            backgroundColor: status !== "idle" ? "#cccccc" : "#3b82f6",
+            color: "#ffffff",
+            border: "none",
+            borderRadius: 8,
+            boxShadow: status === "idle" ? "0 2px 4px rgba(0,0,0,0.1)" : "none",
+            transition: "all 0.2s ease",
           }}
         >
-          Ask only
+          AI Response
         </button>
 
         <button
           onClick={answerOnly}
           disabled={status !== "idle"}
           style={{
-            padding: "8px 16px",
-            fontSize: 14,
+            padding: "12px 24px",
+            fontSize: 16,
+            fontWeight: 600,
             cursor: status !== "idle" ? "not-allowed" : "pointer",
             opacity: status !== "idle" ? 0.6 : 1,
+            backgroundColor: status !== "idle" ? "#cccccc" : "#10b981",
+            color: "#ffffff",
+            border: "none",
+            borderRadius: 8,
+            boxShadow: status === "idle" ? "0 2px 4px rgba(0,0,0,0.1)" : "none",
+            transition: "all 0.2s ease",
           }}
         >
-          Answer with mic
-        </button>
-
-        <button
-          onClick={testMicSTT}
-          disabled={status !== "idle"}
-          style={{
-            padding: "8px 16px",
-            fontSize: 14,
-            cursor: status !== "idle" ? "not-allowed" : "pointer",
-            opacity: status !== "idle" ? 0.6 : 1,
-          }}
-        >
-          Test mic STT
-        </button>
-      </div>
-
-      {/* Debug section to de-emphasize auto loop */}
-      <div style={{ marginTop: 8, opacity: 0.8 }}>
-        <button
-          onClick={handleRunLoop}
-          disabled={status !== "idle"}
-          style={{
-            padding: "6px 12px",
-            fontSize: 13,
-            cursor: status !== "idle" ? "not-allowed" : "pointer",
-            opacity: status !== "idle" ? 0.6 : 1,
-          }}
-        >
-          Debug: Run loop (up to 4 turns)
-        </button>
-        <button
-          onClick={jumpToClosing}
-          disabled={status !== "idle"}
-          style={{
-            padding: "6px 12px",
-            fontSize: 13,
-            marginLeft: 8,
-            cursor: status !== "idle" ? "not-allowed" : "pointer",
-            opacity: status !== "idle" ? 0.6 : 1,
-          }}
-        >
-          Debug: Jump to Closing
+          Your Response
         </button>
       </div>
 
